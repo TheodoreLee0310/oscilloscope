@@ -1,0 +1,309 @@
+{
+  "CONFIG": {
+    "beam": {
+      "intensity": 1,
+      "color": "0x00ff00"
+    },
+    "deflection": {
+      "horizontal": {
+        "voltage": 0,
+        "maxDeflection": 3.0
+      },
+      "vertical": {
+        "voltage": 0,
+        "maxDeflection": 2.5
+      }
+    },
+    "waveform": {
+      "type": "sine",
+      "frequency": 1,
+      "amplitude": 3,
+      "phase": 0,
+      "enabled": false
+    },
+    "screen": {
+      "persistence": 0.95,
+      "color": "0x0",
+      "intensity": 0.6,
+      "gridColor": "0x666666",
+      "gridSpacing": 0.5,
+      "gridOpacity": 0.3
+    },
+    "dotLight": {
+      "color": "0xffff00"
+    },
+    "shell": {
+      "visible": true,
+      "opacity": 0.8,
+      "size": {
+        "width": 3.75,
+        "height": 3.75,
+        "depth": 4
+      },
+      "cylinder1": {
+        "visible": false,
+        "radius": 1.5,
+        "height": 3.5,
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": -3.1416 },
+        "color": "0x88ccff",
+        "opacity": 1
+      },
+      "cylinder2": {
+        "visible": true,
+        "radius": 1,
+        "height": 1.8,
+        "position": { "x": -4.5, "y": 0, "z": 0 },
+        "rotation": { "x": 0, "y": 0, "z": 0 },
+        "color": "0xF0F0F0",
+        "opacity": 1
+      },
+      "rotationCurveConnection": {
+        "visible": true,
+        "curveType": "G2",
+        "connectionLength": 4.65,
+        "segments": 50,
+        "radialSegments": 32,
+        "color": "0xF0F0F0",
+        "opacity": 1,
+        "position": {
+          "offset": { "x": 3.3, "y": 0, "z": 0 },
+          "description": "连接相对于计算中心点的位置偏移"
+        },
+        "rotation": {
+          "offset": { "x": 0, "y": 0, "z": 0},
+          "description": "连接相对于计算方向的旋转偏移（弧度）"
+        },
+        "description": "旋转曲线连接配置 - 用于创建圆柱体之间的平滑过渡"
+      },
+      "superellipseTransition": {
+        "visible": true,
+        "segments": 64,
+        "radialSegments": 32,
+        "transitionLength": 5.0,
+        "startExponent": 2.0,
+        "endExponent": 40.0,
+        "g2Smoothing": true,
+        "color": "0xF0F0F0",
+        "opacity": 1,
+        "position": {
+          "offset": { "x": 1.25, "y": 0, "z": 0 },
+          "description": "形状渐变相对于计算中心点的位置偏移"
+        },
+        "rotation": {
+          "offset": { "x": 0, "y": 0, "z": 0 },
+          "description": "形状渐变相对于计算方向的旋转偏移（弧度）"
+        },
+        "description": "超椭圆形状渐变配置 - 从圆形平滑过渡到矩形（基于|x/a|^m + |y/b|^m = 1，更高的endExponent创造更接近矩形的形状）"
+      }
+    },
+    "camera": {
+      "fov": 45,
+      "near": 0.1,
+      "far": 1000,
+      "position": { "x": 9, "y": 6, "z": 15 },
+      "target": { "x": 0, "y": 0, "z": 0 }
+    },
+    "scene": {
+      "background": "0x20232a",
+      "grid": {
+        "size": 20,
+        "divisions": 40,
+        "color1": "0x4a4a4a",
+        "color2": "0x2f2f2f",
+        "position": { "x": 0, "y": -1.6, "z": 0 }
+      }
+    },
+    "materials": {
+      "metal": {
+        "color": "0xF0F0F0",
+        "metalness": 0.6,
+        "roughness": 0.3,
+        "textures": {
+          "map": "textures/silver_metal_background_1.jpg"
+        }
+      },
+      "plate": {
+        "color": "0xF0F0F0",
+        "metalness": 0.6,
+        "roughness": 0.3,
+        "textures": {
+          "map": "textures/silver_metal_background_1.jpg"
+        }
+      },
+      "screen": {
+        "color": "0x001a00",
+        "roughness": 0.4,
+        "side": "DoubleSide"
+      },
+      "glow": {
+        "opacity": 0.8,
+        "size": 0.02
+      }
+    },
+    "components": {
+      "gun": {
+        "radius": 0.15,
+        "height": 2,
+        "position": { "x": -4, "y": 0, "z": 0 }
+      },
+      "gunHead": {
+        "radius": 0.1,
+        "height": 0.4,
+        "position": { "x": -2.9, "y": 0, "z": 0 }
+      },
+      "verticalPlates": {
+        "width": 0.05,
+        "height": 1.5,
+        "depth": 1,
+        "positions": [
+          { "x": -1.5, "y": 0.8, "z": 0 },
+          { "x": -1.5, "y": -0.8, "z": 0 }
+        ]
+      },
+      "horizontalPlates": {
+        "width": 1.5,
+        "height": 0.05,
+        "depth": 1,
+        "positions": [
+          { "x": -0.2, "y": 0, "z": 0.55 },
+          { "x": -0.2, "y": 0, "z": -0.55 }
+        ]
+      },
+      "screen": {
+        "width": 4,
+        "height": 3,
+        "position": { "x": 6, "y": 0, "z": 0 }
+      }
+    },
+    "electronBeam": {
+      "startPoint": { "x": -3, "y": 0, "z": 0 },
+      "endPoint": { "x": 6, "y": 0, "z": 0 },
+      "pathPoints": [
+        { "x": -2.7, "y": 0, "z": 0 },
+        { "x": -1.5, "y": 0, "z": 0 },
+        { "x": -0.2, "y": 0, "z": 0 },
+        { "x": 3, "y": 0, "z": 0 }
+      ],
+      "trace": {
+        "maxPoints": 100,
+        "opacity": 0.3
+      },
+      "parabolicSegments": 15,
+      "trajectorySmoothing": 0.3,
+      "linearSegments": {
+        "gunToVerticalPlate": 3,
+        "betweenPlates": 3,
+        "plateToScreen": 5
+      },
+      "voltageScalingFactor": 1,
+      "zFightingOffset": 0.05,
+      "screenOffset": 0.01,
+      "enableParticleEffect": false,
+      "physics": {
+        "electronVelocity": 1.0,
+        "electricFieldStrength": 0.8,
+        "platePositions": {
+          "verticalPlateStart": -1.8,
+          "verticalPlateEnd": -1.2,
+          "horizontalPlateStart": -0.5,
+          "horizontalPlateEnd": 0.5
+        }
+      }
+    },
+    "screenEffects": {
+      "maxGlowPoints": 200,
+      "glowPointSize": 0.02,
+      "fadeRate": 10,
+      "minOpacity": 0.05
+    },
+    "explodedView": {
+      "explodeFactor": 1.5,
+      "animationDuration": 1000,
+      "cameraOffset": { "x": 3, "y": 2, "z": 3 }
+    },
+    "demoAnimation": {
+      "electronParticle": {
+        "size": 0.015,
+        "opacity": 0.8,
+        "emissionRate": 8
+      },
+      "cameraOffset": { "x": 3, "y": 2, "z": 3 },
+      "animationDuration": 1500
+    },
+    "ui": {
+      "controlPanel": {
+        "position": { "bottom": "20px", "right": "20px" },
+        "backgroundColor": "rgba(0, 0, 0, 0.7)",
+        "borderRadius": "8px",
+        "padding": "10px",
+        "zIndex": 100
+      },
+      "demoPanel": {
+        "position": { "top": "20px", "left": "20px" },
+        "backgroundColor": "rgba(0, 0, 0, 0.7)",
+        "borderRadius": "8px",
+        "padding": "15px",
+        "maxWidth": "300px",
+        "zIndex": 100
+      },
+      "button": {
+        "backgroundColor": "#2196F3",
+        "hoverColor": "#0b7dda",
+        "activeColor": "#4CAF50",
+        "warningColor": "#f44336",
+        "padding": "8px 12px",
+        "borderRadius": "4px"
+      }
+    },
+    "labelSystem": {
+      "backgroundColor": "rgba(0, 0, 0, 0.6)",
+      "color": "white",
+      "padding": "2px 6px",
+      "borderRadius": "3px",
+      "fontSize": "12px",
+      "descriptionPanel": {
+        "position": { "bottom": "20px", "left": "20px" },
+        "backgroundColor": "rgba(0, 0, 0, 0.8)",
+        "maxWidth": "400px",
+        "zIndex": 1000
+      }
+    },
+    "descriptions": {
+      "gun": {
+        "name": "电子枪",
+        "description": "电子枪是阴极射线管的核心部件，负责产生并加速电子束。它由加热的阴极（负极）和带正电的阳极组成，电子从阴极释放后被阳极加速，形成高速电子束。"
+      },
+      "gunHead": {
+        "name": "电子枪出口",
+        "description": "电子枪出口是电子束离开电子枪进入偏转系统的位置。在这里，电子束被聚焦成一个细小的光点，准备接受后续的偏转控制。"
+      },
+      "v1": {
+        "name": "垂直偏转板（上）",
+        "description": "垂直偏转板是一对带电平行板，用于控制电子束在垂直方向上的偏转。当上下偏转板之间施加电压时，电子束会受到垂直方向的电场力，导致在垂直方向上偏转。"
+      },
+      "v2": {
+        "name": "垂直偏转板（下）",
+        "description": "垂直偏转板的下板，与上板形成电场。通过调整两板之间的电压，可以控制电子束向上或向下偏转的程度。"
+      },
+      "h1": {
+        "name": "水平偏转板（左）",
+        "description": "水平偏转板是一对带电平行板，用于控制电子束在水平方向上的偏转。当左右偏转板之间施加电压时，电子束会受到水平方向的电场力，导致在水平方向上偏转。"
+      },
+      "h2": {
+        "name": "水平偏转板（右）",
+        "description": "水平偏转板的右板，与左板形成电场。通过调整两板之间的电压，可以控制电子束向左或向右偏转的程度。"
+      },
+      "screen": {
+        "name": "荧光屏",
+        "description": "荧光屏是涂有荧光物质的平板，当高速电子束击中荧光屏时，荧光物质会发光，形成可见的光点。通过控制电子束的偏转，可以在荧光屏上绘制各种图形和波形。"
+      }
+    }
+  },
+  "WAVEFORM_TYPES": {
+    "sine": "正弦波",
+    "square": "方波",
+    "sawtooth": "锯齿波",
+    "triangle": "三角波"
+  }
+}

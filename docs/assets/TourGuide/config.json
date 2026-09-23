@@ -1,0 +1,22 @@
+[
+  {
+    "title": "欢迎使用示波器仿真系统",
+    "content": "这是一个交互式的示波器仿真系统，可以帮助您学习示波器的基本操作和波形分析。接下来将引导您了解主要功能。",
+    "target": "header",
+    "clip": false,
+    "position": { "left": 400, "top": 80 }
+  },
+  { "title": "实验步骤选择", "content": "示波器操作分为两个步骤：<br>1. 自检校准 - 首先需要校准示波器<br>2. 标准测量 - 进行波形测量和分析", "target": ".exp-steps", "clip": true },
+  { "title": "自检校准模式", "content": "校准模式下，系统会生成固定参数的方波信号，您需要调整微调滑块使波形显示准确。", "target": ".calibration-panel", "clip": true, "click": true },
+  { "title": "校准滑块", "content": "使用这些滑块微调波形显示。目标是使方波的边缘尽量垂直，显示准确。", "target": ".slider-container", "clip": true },
+  { "title": "标准测量模式", "content": "完成校准后，切换到标准测量模式进行实验。", "target": "#normal-mode-btn", "clip": true, "click": true },
+  { "title": "波形选择", "content": "选择不同类型的波形（正弦波、方波、三角波等）进行观察和测量。", "target": ".wave-select-container", "clip": true },
+  { "title": "参数设置", "content": "调整波形的频率和峰峰值，观察波形变化。频率决定波形周期，峰峰值决定波形幅度。", "target": ".parameter-control", "clip": true },
+  { "title": "显示模式切换", "content": "切换不同的显示模式：<br>- 独立显示：分别查看各通道波形<br>- 同向叠加：波形叠加显示<br>- 垂直叠加：观察李萨如图形", "target": ".display-mode-switcher", "clip": true },
+  { "title": "时间与电压控制", "content": "调整时间分度值(s/div)和电压分度值(V/div)，改变波形在屏幕上的显示比例。", "target": ".time-voltage-section", "clip": true },
+  { "title": "触发系统", "content": "触发系统用于稳定波形显示。调整触发电平可以捕获特定幅值的信号。", "target": ".trigger-section", "clip": true },
+  { "title": "李萨如图形模式", "content": "开启两个通道并选择'垂直叠加'模式可以观察李萨如图形。通过调整两通道的频率比和相位差，观察图形变化。", "target": "#lissajous-mode-btn", "clip": true },
+  { "title": "实验完成", "content": "现在您已了解示波器仿真系统的基本功能。建议按照自检校准→标准测量→李萨如分析的顺序进行实验。<br><br>如需再次查看此引导，请点击右下角的'引导教程'按钮。", "target": "header", "clip": false, "position": { "left": 400, "top": 80 } }
+]
+
+

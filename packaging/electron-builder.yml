@@ -1,0 +1,64 @@
+# Electron Builder 配置文件
+appId: com.oscilloscope.simulator
+productName: 示波器仿真系统
+
+directories:
+  output: dist
+
+files:
+  - electron-main.js
+  - docs/**/*
+  - assets/**/*
+  - "!docs/**/*.map"
+  - "!**/node_modules/**"
+  - "!**/*.{ts,tsx,scss,sass,less}" # 排除源文件
+  - "!**/src/**" # 排除源代码目录
+  - "!**/public/**" # 排除开发用公共文件
+  - "!**/CDN/**" # CDN文件已复制到docs/assets，排除原始文件
+  - "!**/{.git,.DS_Store,Thumbs.db}" # 排除系统文件
+  - "!**/webpack*.js" # 排除构建配置
+  - "!**/babel*.js" # 排除Babel配置
+  - "!**/.{gitignore,editorconfig,eslintrc*}" # 排除配置文件
+
+# 移除extraResources，避免重复打包
+# extraResources:
+#   - from: docs
+#     to: docs
+
+# Windows配置
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+  # 确保便携版包含图标
+  artifactName: "${productName}-${version}-portable.${ext}"
+  # 压缩配置
+  compression: maximum
+  # 排除开发依赖
+  excludeFromCodeSigning: false
+
+# macOS配置
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.education
+
+# Linux配置
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Education
+
+# DMG配置
+dmg:
+  title: 示波器仿真系统

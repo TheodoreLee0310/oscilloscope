@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>示波器内部原理</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #091019; }
+    #info {
+      position: absolute;
+      top: 0; width: 100%; padding: .5rem;
+      background: rgba(0,0,0,.5); color: #fff; text-align: center;
+      font-family: sans-serif;
+      height: 5%;
+    }
+    
+    /* 响应式 GUI 控制面板 - 以2560*1440为标准向下兼容 */
+    .dg.main {
+      position: absolute;
+      top: 80px;
+      right: 10px;
+      width: 400px; /* 2560*1440标准宽度 */
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+    
+    .dg.main .close-button {
+      position: relative;
+      line-height: 19px;
+    }
+    
+    /* 2K显示器 (2560*1440) - 基准分辨率 */
+    @media screen and (min-width: 2560px) and (min-height: 1440px) {
+      .dg.main {
+        width: 400px;
+        right: 15px;
+        font-size: 14px;
+      }
+      .dg.main li {
+        padding: 8px 0;
+      }
+      .dg.main input {
+        font-size: 13px;
+      }
+    }
+    
+    /* 标准FHD (1920*1080) */
+    @media screen and (max-width: 2559px) and (min-width: 1920px), 
+           screen and (max-height: 1439px) and (min-height: 1080px) {
+      .dg.main {
+        width: 350px;
+        right: 10px;
+        font-size: 13px;
+      }
+      .dg.main li {
+        padding: 7px 0;
+      }
+    }
+    
+    /* 中等分辨率 (1366*768, 1600*900) */
+    @media screen and (max-width: 1919px) and (min-width: 1366px) {
+      .dg.main {
+        width: 300px;
+        right: 8px;
+        font-size: 12px;
+      }
+      .dg.main li {
+        padding: 6px 0;
+      }
+      .dg.main input {
+        font-size: 11px;
+      }
+    }
+    
+    /* 小屏幕 (1024*768) */
+    @media screen and (max-width: 1365px) and (min-width: 1024px) {
+      .dg.main {
+        width: 260px;
+        right: 5px;
+        font-size: 11px;
+      }
+      .dg.main li {
+        padding: 5px 0;
+      }
+      .dg.main input {
+        font-size: 10px;
+      }
+    }
+    
+    /* 平板和小笔记本 (768px - 1023px) */
+    @media screen and (max-width: 1023px) and (min-width: 768px) {
+      .dg.main {
+        width: 240px;
+        right: 3px;
+        top: 60px;
+        font-size: 10px;
+      }
+      .dg.main li {
+        padding: 4px 0;
+      }
+      .dg.main input {
+        font-size: 9px;
+        padding: 2px;
+      }
+      .dg.main .folder-name {
+        font-size: 11px;
+      }
+    }
+    
+    /* 移动设备 (< 768px) */
+    @media screen and (max-width: 767px) {
+      .dg.main {
+        position: fixed;
+        top: 10px;
+        right: 5px;
+        left: 5px;
+        width: auto;
+        max-width: 300px;
+        margin: 0 auto;
+        font-size: 9px;
+        background: rgba(0,0,0,0.8);
+        border-radius: 5px;
+      }
+      .dg.main li {
+        padding: 3px 0;
+      }
+      .dg.main input {
+        font-size: 8px;
+        padding: 1px;
+      }
+      .dg.main .folder-name {
+        font-size: 10px;
+      }
+      
+      /* 调整info区域为移动设备优化 */
+      #info {
+        font-size: 12px;
+        padding: 0.3rem;
+        height: auto;
+        min-height: 40px;
+      }
+    }
+    
+    /* 超小屏幕优化 */
+    @media screen and (max-width: 480px) {
+      .dg.main {
+        position: fixed;
+        bottom: 10px;
+        top: auto;
+        right: 5px;
+        left: 5px;
+        width: calc(100% - 10px);
+        max-width: 250px;
+        font-size: 8px;
+      }
+      .dg.main li {
+        padding: 2px 0;
+      }
+      .dg.main input {
+        width: 40px !important;
+        font-size: 7px;
+      }
+    }
+    
+    #switch-to-external { display:none; }
+  </style>
+  <!-- Webpack 会在此页自动注入内部原理所需的 bundle 脚本 -->
+  <!-- 注意：此页专属于"内部原理"三维演示，互不干扰 -->
+</head>
+<body>
+    <script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script>
+<script>
+  new CozeWebSDK.WebChatClient({
+    config: {
+      bot_id: '7615570790280429603',
+    },
+    //
+    componentProps: {
+      title: 'Coze',
+    },
+    auth: {
+      type: 'token',
+      token: 'pat_ZFXjfGNIpNff4HhyAotGLemeIb3ahyJHVyxAMyRagJeDlX60jA34mLtykYmGhIuf',
+      onRefreshToken: function () {
+        return 'pat_ZFXjfGNIpNff4HhyAotGLemeIb3ahyJHVyxAMyRagJeDlX60jA34mLtykYmGhIuf'
+      }
+    }
+  });
+</script>
+  <div id="info">鼠标拖动旋转，滚轮缩放观察模型</div>
+  <script src="./internal-loading-screen.js"></script>
+  <!-- switcher 初始化移至 JS（main.js）中集中管理 -->
+    <script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script>
+  <script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script>
+</body>
+<!-- 其余脚本由 HtmlWebpackPlugin 自动注入 -->
+</html>
+
+
