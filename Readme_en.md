@@ -1,0 +1,138 @@
+# ShiBoQI
+
+> A WebGL-based interactive oscilloscope simulation system
+
+An interactive oscilloscope simulator for electronics education. It lets you drive a 2D waveform panel in the browser, explore the internal working principles of a CRT oscilloscope in 3D with Three.js, and package the whole thing as an Electron desktop app.
+
+## Features
+
+- **Self-calibration**: calibrate against a fixed square wave by fine-tuning sliders to learn how an oscilloscope is calibrated.
+- **Standard measurement**: 6 waveform types (sine, square, triangle, sawtooth, noise, pulse) with two channels supporting independent / overlay / vertical (Lissajous) display.
+- **Lissajous figures**: adjust the frequency ratio and phase difference between two channels in vertical mode to observe Lissajous patterns.
+- **Trigger system**: auto / normal / single trigger modes with adjustable trigger level, source and slope for a stable display.
+- **Waveform recognition from images**: upload or capture a waveform image; a built-in algorithm identifies the waveform type and parameters and applies them to the oscilloscope in one click.
+- **VR wave hunting**: uses Baidu Maps geolocation to map terrain features onto waveforms (mountains → sawtooth, water → sine, plains → low-frequency sine, etc.).
+- **3D internal principles**: a Three.js CRT model with exploded views, explosion animations, a label system, and electron-beam / phosphor-screen simulation.
+- **Built-in AI assistant**: a Q&A assistant powered by a local knowledge base to answer usage questions.
+- **Guided tour**: a step-by-step tour guide that pops up on first visit to the main panel.
+
+## Tech stack
+
+| Area | Technology |
+| --- | --- |
+| View layer | Vue.js 2.7.16 |
+| 3D rendering | Three.js 0.177.0 |
+| Animation | TWEEN.js |
+| Parameter panel | dat.GUI |
+| Build tooling | Webpack 5 + webpack-dev-server 5 |
+| Desktop | Electron 28 + electron-builder |
+
+## Project structure
+
+```
+├── public/                    # HTML templates and static assets
+│   ├── external.html          # -> generates index.html (panel / oscilloscope)
+│   ├── internal.html          # -> generates internal.html (3D internals)
+│   ├── login.html             # -> emitted as login.html (sign in / sign up)
+│   ├── styles.css             # Main stylesheet
+│   └── textures/              # Textures
+├── src/                       # Frontend source
+│   ├── main.js                # Entry for the 3D internals page
+│   ├── external.js            # Entry for the panel / oscilloscope page (Vue instance)
+│   ├── components/            # 3D components (electron beam, screen, CRT shell, labels, exploded view, ...)
+│   ├── controllers/           # GUI / UI controllers
+│   ├── materials/             # Material management
+│   ├── widgets/               # Page switcher, tour guide
+│   ├── geometry/ utils/ examples/
+│   └── config.json            # 3D scene configuration
+├── scripts/                   # Waveform and business logic modules
+│   ├── waveDrawer.js          # Waveform rendering
+│   ├── lissajousDrawer.js     # Lissajous figures
+│   ├── calibrationLogic.js    # Calibration logic
+│   ├── deepseekService.js     # Waveform / image recognition (local computation, no network calls)
+│   ├── knowledgeBase.js       # Local knowledge base (AI assistant)
+│   ├── WaveformUtilities.js   # Waveform utilities
+│   ├── StepAdjustmentUtils.js # Step adjustment utilities
+│   └── constants.js           # Constants
+├── docs/                      # Build output (from `npm run build`, tracked in version control)
+├── packaging/                 # Electron packaging scripts and config
+├── electron-main.js           # Electron main process entry
+├── webpack.config.js
+└── package.json
+```
+
+## Getting started
+
+Requirements: **Node.js >= 18** and npm.
+
+```bash
+npm install
+npm run dev
+```
+
+The dev server runs at <http://localhost:8081> and opens `index.html` automatically.
+
+> **Note**: both `index.html` and `internal.html` are protected by a login guard and will **redirect to `login.html` when you are not signed in**. Create an account first — see "Authentication" below.
+
+### Common commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the dev server (port 8081, hot reload) |
+| `npm run build` | Production build, output to `docs/` |
+| `npm run electron` | Run the built output with Electron |
+| `npm run electron:dev` | Start the dev server and Electron together |
+| `npm run dist` | Package a desktop installer for the current platform |
+| `npm run dist:win` / `dist:mac` / `dist:linux` | Package for a specific platform |
+
+## Pages
+
+| Page | Template | Output | Description |
+| --- | --- | --- | --- |
+| Sign in / Sign up | `public/login.html` | `login.html` | Self-contained static page for authentication |
+| Panel / Oscilloscope | `public/external.html` | `index.html` | 2D waveform control panel (Vue 2) |
+| Internals | `public/internal.html` | `internal.html` | 3D CRT principle demo (Three.js) |
+
+The two main pages are generated by HtmlWebpackPlugin from the templates under `public/`. A switcher in the top-right corner navigates between "External (panel / oscilloscope)" and "Internals".
+
+> Tip: the VR wave hunting feature depends on the Baidu Maps API and requires an internet connection.
+
+## Authentication
+
+The project currently runs in a **frontend mock mode**, so the full flow works without any backend:
+
+- Accounts are stored in the browser's `localStorage` under `sbq_mock_users`
+- The session is stored in `sbq_token` (token) and `sbq_user` (user info)
+- The main panel shows the current user's nickname in the top-right corner along with a "Sign out" button
+
+A backend (Express + MySQL) is planned. Once it is ready, flip two switches in `public/login.html` to talk to the real API:
+
+```js
+var API_BASE = 'http://localhost:3000/api'; // Backend base URL
+var USE_MOCK = false;                       // Turn off mock mode, call the real backend
+```
+
+Reserved API contract:
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| POST | `/api/auth/register` | `{ username, password, nickname }` | `{ token, user }` |
+| POST | `/api/auth/login` | `{ username, password }` | `{ token, user }` |
+
+## Deployment
+
+`npm run build` emits a complete, publishable site into `docs/` (including `login.html`, bundles, styles, static assets and textures). You can host it on any static server.
+
+To use GitHub Pages, open the repository's **Settings → Pages** and set the Source to the `/docs` folder on the `master` branch.
+
+## Contributing
+
+1. Fork this repository
+2. Create a `Feat_xxx` branch
+3. Commit your changes
+4. Open a Pull Request
+
+## Languages
+
+- [简体中文](README.md)
+- English (this file)
