@@ -61,6 +61,9 @@ function createVueApp() {
   return new Vue({
     el: '#app',
     data: {
+      // 当前登录用户（从 localStorage 读取）
+      currentUser: null,
+
       // 当前模式，'wave'表示波形模式
       currentMode: 'wave',
 
@@ -353,6 +356,7 @@ function createVueApp() {
     },
     mounted() {
       try {
+        this.loadCurrentUser();
         this.initCanvas();
         this.initEventListeners();
         this.startDrawLoop();
@@ -463,6 +467,20 @@ function createVueApp() {
       }
     },
     methods: {
+      // ===== 登录用户 =====
+      loadCurrentUser() {
+        try {
+          this.currentUser = JSON.parse(localStorage.getItem('sbq_user') || 'null');
+        } catch (e) {
+          this.currentUser = null;
+        }
+      },
+      logout() {
+        localStorage.removeItem('sbq_token');
+        localStorage.removeItem('sbq_user');
+        window.location.href = './login.html';
+      },
+
       // ===== Canvas 初始化 =====
       initCanvas() {
         const canvas = this.$refs.oscilloscope;

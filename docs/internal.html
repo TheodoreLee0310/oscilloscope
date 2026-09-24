@@ -155,7 +155,13 @@
       }
     }
     
-    #switch-to-external { display:none; }</style><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script></head><body><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script><script>new CozeWebSDK.WebChatClient({
+    #switch-to-external { display:none; }</style><script>(function () {
+      try {
+        if (!localStorage.getItem('sbq_token')) {
+          window.location.replace('./login.html');
+        }
+      } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
+    })();</script><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script></head><body><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script><script>new CozeWebSDK.WebChatClient({
     config: {
       bot_id: '7615570790280429603',
     },

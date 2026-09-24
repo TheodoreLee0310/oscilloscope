@@ -17,13 +17,20 @@ module.exports = {
   output: {
     filename: 'js/[name].bundle.js',
     path: path.resolve(__dirname, 'docs'),   // 构建输出目录
-    publicPath: './',                        // 始终使用相对路径，确保打包后的文件可以直接打开
+    publicPath: './',                        // 始终使用相对路径，确保打包后的文件可以直接打开（Electron/file://）
     clean: !isDev,                          // 开发模式不清理，避免影响热重载
   },
   devtool: isDev ? 'eval-cheap-module-source-map' : false, // 生产环境移除 source map
   devServer: {
+    // 仅开发服务器使用绝对路径 '/'：否则 webpack-dev-server 无法在根路径提供
+    // index.html 与 bundle（这正是之前只能靠 docs 静态目录兜底的原因）。
+    // 生产构建的 output.publicPath 仍为 './'，不受影响。
+    devMiddleware: {
+      publicPath: '/',
+    },
     static: [
-      { directory: path.resolve(__dirname, 'docs') },
+      // 注意：不要把构建输出目录 docs 放进静态目录，否则旧的构建产物会遮蔽
+      // webpack 在内存中新生成的 index.html / internal.html，导致改动在 dev 下不生效
       { directory: path.resolve(__dirname, 'public') },
       { directory: path.resolve(__dirname, 'CDN') },
     ],
@@ -58,6 +65,8 @@ module.exports = {
       patterns: [
         // 其他静态资源：样式与第三方库
         { from: path.resolve(__dirname, 'public/styles.css'), to: 'css/styles.css' },
+        // 登录页：必须一并输出到构建产物，否则打包/发布后守卫跳转会 404
+        { from: path.resolve(__dirname, 'public/login.html'), to: 'login.html' },
         { from: path.resolve(__dirname, 'CDN'), to: 'assets/CDN' },
         // 迁移后的引导资源从 src/widgets/tour-guide 输出到 assets/TourGuide
         { from: path.resolve(__dirname, 'src/widgets/tour-guide/config.json'), to: 'assets/TourGuide/config.json' },

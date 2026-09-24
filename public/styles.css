@@ -15,10 +15,42 @@ body {
 
 /* 布局样式 */
 header {
+  position: relative;
   background: #2c3e50;
   color: white;
   padding: 10px;
   text-align: center;
+}
+
+/* 用户信息栏（右上角） */
+.user-bar {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  /* 高于引导遮罩 #introduce(z-index:9998)，保证引导进行中也能点击退出登录 */
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.user-bar .user-name {
+  color: #9fb3c8;
+}
+
+.user-bar .logout-btn {
+  padding: 4px 12px;
+  border: 1px solid #5b738c;
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.user-bar .logout-btn:hover {
+  background: #3a5268;
 }
 
 main {

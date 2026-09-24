@@ -7,6 +7,16 @@
   <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=tMz9vycikwq7TTyRRIyvLYd3t8xVkfve"></script>
   <!-- Webpack 会在此页自动注入所需的 bundle 脚本和样式 -->
   <!-- 注意：此页专属于"外部面板/示波器"演示，互不干扰 -->
+  <!-- 登录校验：未登录则跳转登录页 -->
+  <script>
+    (function () {
+      try {
+        if (!localStorage.getItem('sbq_token')) {
+          window.location.replace('./login.html');
+        }
+      } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
+    })();
+  </script>
 </head>
 <body>
   <!-- 整体应用容器 -->
@@ -21,6 +31,12 @@
         <button id="normal-mode-btn" @click="setExpStep('normal')" :class="{ active: expStep === 'normal' }">2. 标准测量</button>
         <button @click="setExpStep('vrwave')" :class="{ active: expStep === 'vrwave' }">3. VR寻波</button>
         <button @click="setExpStep('imagewave')" :class="{ active: expStep === 'imagewave' }">4. 图片识别</button>
+      </div>
+
+      <!-- 用户信息 / 退出登录 -->
+      <div class="user-bar" v-if="currentUser">
+        <span class="user-name">{{ currentUser.nickname || currentUser.username }}</span>
+        <button class="logout-btn" @click="logout">退出登录</button>
       </div>
     </header>
 

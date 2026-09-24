@@ -165,6 +165,16 @@
   </style>
   <!-- Webpack 会在此页自动注入内部原理所需的 bundle 脚本 -->
   <!-- 注意：此页专属于"内部原理"三维演示，互不干扰 -->
+  <!-- 登录校验：未登录则跳转登录页（与 index.html 保持一致） -->
+  <script>
+    (function () {
+      try {
+        if (!localStorage.getItem('sbq_token')) {
+          window.location.replace('./login.html');
+        }
+      } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
+    })();
+  </script>
 </head>
 <body>
     <script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script>

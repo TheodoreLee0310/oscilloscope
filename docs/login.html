@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 · 智波助梦</title>
+  <!--
+    此页为「自包含静态页」：样式与脚本全部内联，由 public/ 静态目录直接提供。
+    后端就绪后：把下面的 USE_MOCK 改为 false，并确认 API_BASE 指向你的 Express 服务即可。
+  -->
+  <style>
+    html, body { margin: 0; height: 100%; font-family: Arial, 'Microsoft YaHei', sans-serif; }
+    body { background: linear-gradient(135deg, #1b2a3a 0%, #2c3e50 60%, #22303f 100%);
+           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { width: 380px; max-width: 92vw; background: #fff; border-radius: 10px;
+            box-shadow: 0 12px 32px rgba(0,0,0,.35); overflow: hidden; }
+    .brand { background: #2c3e50; color: #fff; text-align: center; padding: 22px 16px 18px; }
+    .brand h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+    .brand p { margin: 6px 0 0; font-size: 12px; color: #9fb3c8; }
+    .tabs { display: flex; border-bottom: 1px solid #eee; }
+    .tabs button { flex: 1; padding: 12px 0; border: 0; background: none; cursor: pointer;
+                   font-size: 15px; color: #7f8c9b; }
+    .tabs button.active { color: #2196F3; font-weight: bold; border-bottom: 2px solid #2196F3; }
+    .body { padding: 22px 24px 8px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 13px; color: #34495e; margin-bottom: 6px; }
+    .field input { width: 100%; box-sizing: border-box; padding: 10px 12px;
+                   border: 1px solid #dfe6ec; border-radius: 6px; font-size: 14px; outline: none; }
+    .field input:focus { border-color: #2196F3; }
+    .btn { width: 100%; padding: 11px 0; border: 0; border-radius: 6px; cursor: pointer;
+           background: #2196F3; color: #fff; font-size: 15px; letter-spacing: 1px; }
+    .btn:hover { background: #1976d2; }
+    .btn:disabled { background: #9cc7ec; cursor: not-allowed; }
+    .tip { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; margin-bottom: 14px; }
+    .tip.error { background: #fdecea; color: #c0392b; }
+    .tip.ok { background: #e8f5e9; color: #2e7d32; }
+    .foot { text-align: center; font-size: 12px; color: #9aa7b4; padding: 4px 24px 18px; }
+    .hide { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <h1>智波助梦</h1>
+      <p>示波器仿真系统</p>
+    </div>
+    <div class="tabs">
+      <button id="tab-login" class="active" onclick="switchTab('login')">登录</button>
+      <button id="tab-register" onclick="switchTab('register')">注册</button>
+    </div>
+    <div class="body">
+      <div id="msg" class="tip hide"></div>
+
+      <div id="pane-login">
+        <div class="field"><label>用户名</label><input id="l-user" placeholder="请输入用户名" /></div>
+        <div class="field"><label>密码</label><input id="l-pass" type="password" placeholder="请输入密码" /></div>
+        <button class="btn" id="btn-login" onclick="onLogin()">登 录</button>
+      </div>
+
+      <div id="pane-register" class="hide">
+        <div class="field"><label>用户名</label><input id="r-user" placeholder="3-20 位，登录时使用" /></div>
+        <div class="field"><label>昵称（可选）</label><input id="r-nick" placeholder="显示名称" /></div>
+        <div class="field"><label>密码</label><input id="r-pass" type="password" placeholder="至少 6 位" /></div>
+        <div class="field"><label>确认密码</label><input id="r-confirm" type="password" placeholder="再次输入密码" /></div>
+        <button class="btn" id="btn-register" onclick="onRegister()">注 册</button>
+      </div>
+    </div>
+    <div class="foot">登录信息将保存至后端 MySQL，实现多用户与实验记录持久化</div>
+  </div>
+
+  <script>
+    // ===== 后端接入配置 =====
+    // API_BASE：Express 服务地址（后端就绪后确认此地址）
+    // USE_MOCK：true = 使用浏览器本地数据；false = 调用真实后端接口
+    var API_BASE = 'http://localhost:3000/api';
+    var USE_MOCK = true;
+
+    // localStorage 键名（与后续 Vue 应用保持一致）
+    var TOKEN_KEY = 'sbq_token';
+    var USER_KEY = 'sbq_user';
+    var USERS_KEY = 'sbq_mock_users';
+
+    function $(id) { return document.getElementById(id); }
+
+    function showMsg(text, type) {
+      var el = $('msg');
+      el.textContent = text;
+      el.className = 'tip ' + type;
+    }
+    function clearMsg() { $('msg').className = 'tip hide'; }
+
+    function switchTab(tab) {
+      clearMsg();
+      var isLogin = tab === 'login';
+      $('tab-login').className = isLogin ? 'active' : '';
+      $('tab-register').className = isLogin ? '' : 'active';
+      $('pane-login').className = isLogin ? '' : 'hide';
+      $('pane-register').className = isLogin ? 'hide' : '';
+    }
+
+    function getUsers() {
+      try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function setUsers(list) { localStorage.setItem(USERS_KEY, JSON.stringify(list)); }
+
+    function saveSession(token, user) {
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
+    function toPublic(u) {
+      return { id: u.id, username: u.username, nickname: u.nickname || u.username, createdAt: u.createdAt };
+    }
+    function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // 统一请求封装（真实后端时使用）
+    function request(path, options) {
+      options = options || {};
+      return fetch(API_BASE + path, {
+        method: options.method || 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data && data.message) || '请求失败(' + res.status + ')');
+          return data;
+        });
+      });
+    }
+
+    function login(username, password) {
+      if (!USE_MOCK) {
+        return request('/auth/login', { method: 'POST', body: { username: username, password: password } })
+          .then(function (d) { saveSession(d.token, d.user); return d.user; });
+      }
+      return delay(400).then(function () {
+        var u = getUsers().filter(function (x) {
+          return x.username === username && x.password === password;
+        })[0];
+        if (!u) throw new Error('用户名或密码错误');
+        saveSession('mock-token-' + u.id, toPublic(u));
+        return toPublic(u);
+      });
+    }
+
+    function register(username, password, nickname) {
+      if (!USE_MOCK) {
+        return request('/auth/register', { method: 'POST', body: { username: username, password: password, nickname: nickname } })
+          .then(function (d) { saveSession(d.token, d.user); return d.user; });
+      }
+      return delay(400).then(function () {
+        var users = getUsers();
+        if (users.some(function (x) { return x.username === username; })) throw new Error('该用户名已被注册');
+        var nu = {
+          id: Date.now(), username: username, password: password,
+          nickname: nickname || username, createdAt: new Date().toISOString()
+        };
+        users.push(nu); setUsers(users);
+        return toPublic(nu);
+      });
+    }
+
+    function onLogin() {
+      clearMsg();
+      var u = $('l-user').value.trim(), p = $('l-pass').value;
+      if (!u || !p) return showMsg('请输入用户名和密码', 'error');
+      $('btn-login').disabled = true;
+      login(u, p)
+        .then(function () {
+          showMsg('登录成功，正在进入系统...', 'ok');
+          setTimeout(function () { window.location.href = './index.html'; }, 600);
+        })
+        .catch(function (e) { showMsg(e.message || '登录失败', 'error'); })
+        .then(function () { $('btn-login').disabled = false; });
+    }
+
+    function onRegister() {
+      clearMsg();
+      var u = $('r-user').value.trim(), n = $('r-nick').value.trim(),
+          p = $('r-pass').value, c = $('r-confirm').value;
+      if (!u || !p) return showMsg('请填写用户名和密码', 'error');
+      if (u.length < 3 || u.length > 20) return showMsg('用户名长度需为 3-20 位', 'error');
+      if (p.length < 6) return showMsg('密码至少 6 位', 'error');
+      if (p !== c) return showMsg('两次输入的密码不一致', 'error');
+      $('btn-register').disabled = true;
+      register(u, p, n)
+        .then(function () {
+          $('l-user').value = u; $('l-pass').value = '';
+          $('r-user').value = ''; $('r-nick').value = '';
+          $('r-pass').value = ''; $('r-confirm').value = '';
+          switchTab('login');
+          showMsg('注册成功，请登录', 'ok');
+        })
+        .catch(function (e) { showMsg(e.message || '注册失败', 'error'); })
+        .then(function () { $('btn-register').disabled = false; });
+    }
+
+    // 回车提交
+    document.addEventListener('DOMContentLoaded', function () {
+      $('l-user').addEventListener('keyup', function (e) { if (e.key === 'Enter') onLogin(); });
+      $('l-pass').addEventListener('keyup', function (e) { if (e.key === 'Enter') onLogin(); });
+      $('r-confirm').addEventListener('keyup', function (e) { if (e.key === 'Enter') onRegister(); });
+    });
+  </script>
+</body>
+</html>
