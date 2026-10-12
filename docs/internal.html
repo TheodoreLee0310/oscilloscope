@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"/><title>示波器内部原理</title><style>body { margin: 0; overflow: hidden; background: #091019; }
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/><title>示波器内部原理</title><style>body { margin: 0; overflow: hidden; background: #091019; }
     #info {
       position: absolute;
       top: 0; width: 100%; padding: .5rem;
@@ -157,23 +157,43 @@
     
     #switch-to-external { display:none; }</style><script>(function () {
       try {
-        if (!localStorage.getItem('sbq_token')) {
+        // 与 index.html 相同的守卫逻辑：localStorage 优先，其次是登录页通过
+        // URL 桥接过来的 token（宿主禁用 DOM Storage 时的降级通道）。
+        var stored = null;
+        try { stored = localStorage.getItem('sbq_token'); } catch (e) { stored = null; }
+
+        var urlToken = null;
+        try {
+          urlToken = new URLSearchParams(window.location.search).get('sbq_token');
+        } catch (e) { urlToken = null; }
+
+        if (!stored && !urlToken) {
           window.location.replace('./login.html');
         }
       } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
-    })();</script><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script></head><body><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script><script>new CozeWebSDK.WebChatClient({
-    config: {
-      bot_id: '7615570790280429603',
-    },
-    //
-    componentProps: {
-      title: 'Coze',
-    },
-    auth: {
-      type: 'token',
-      token: 'pat_ZFXjfGNIpNff4HhyAotGLemeIb3ahyJHVyxAMyRagJeDlX60jA34mLtykYmGhIuf',
-      onRefreshToken: function () {
-        return 'pat_ZFXjfGNIpNff4HhyAotGLemeIb3ahyJHVyxAMyRagJeDlX60jA34mLtykYmGhIuf'
+    })();</script><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script><link href="./css/internal.css" rel="stylesheet"></head><body><script>// 令牌与 botId 支持部署时注入：在页面里先声明 window.SBQ_COZE_CONFIG 即可覆盖。
+    // ⚠️ 安全提示：下面的 token 是已提交进公开仓库的 Coze PAT，等同于已泄露，
+    //    请到 Coze 控制台吊销后改用注入方式，切勿继续在源码里硬编码。
+    window.SBQ_COZE_CONFIG = window.SBQ_COZE_CONFIG || {
+      botId: '7615570790280429603',
+      token: 'pat_ZFXjfGNIpNff4HhyAotGLemeIb3ahyJHVyxAMyRagJeDlX60jA34mLtykYmGhIuf'
+    };</script><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js" onerror="window.__sbqCozeUnavailable = true"></script><script>(function () {
+      try {
+        if (typeof CozeWebSDK === 'undefined' || !CozeWebSDK.WebChatClient) {
+          console.warn('[Coze] SDK 不可用（离线或被安全策略拦截），已跳过 AI 助手挂件');
+          return;
+        }
+        var cfg = window.SBQ_COZE_CONFIG || {};
+        new CozeWebSDK.WebChatClient({
+          config: { bot_id: cfg.botId },
+          componentProps: { title: 'Coze' },
+          auth: {
+            type: 'token',
+            token: cfg.token,
+            onRefreshToken: function () { return cfg.token; }
+          }
+        });
+      } catch (err) {
+        console.warn('[Coze] 初始化失败，已忽略：', err);
       }
-    }
-  });</script><div id="info">鼠标拖动旋转，滚轮缩放观察模型</div><script src="./internal-loading-screen.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script><script src="https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.2.0-beta.19/libs/cn/index.js"></script></body></html>
+    })();</script><div id="info">拖动旋转，双指 / 滚轮缩放观察模型</div><script src="./internal-loading-screen.js"></script></body></html>

@@ -19,13 +19,43 @@ export default class TourGuide {
     this.DISTANCE       = 16;
     this.VW             = window.innerWidth  || document.documentElement.clientWidth;
     this.VH             = window.innerHeight || document.documentElement.clientHeight;
+
+    // 视口变化（手机旋转 / 软键盘弹出 / 鸿蒙分屏）时刷新尺寸并重新定位浮层，
+    // 否则引导框会停在旧坐标上错位。用箭头函数保存引用，便于销毁时精确移除。
+    this._onViewportChange = () => {
+      this.VW = window.innerWidth  || document.documentElement.clientWidth;
+      this.VH = window.innerHeight || document.documentElement.clientHeight;
+      if (!this.popEl || !this.overlayEl) return;
+
+      const step = this.steps[this.index];
+      if (!step) return;
+      if (step.position) {
+        this.#place(step.position.left, step.position.top);
+      } else {
+        const target = step.target ? document.querySelector(step.target) : null;
+        this.#position(target, !!step.clip);
+      }
+    };
+    window.addEventListener('resize', this._onViewportChange);
+    window.addEventListener('orientationchange', this._onViewportChange);
   }
 
   /* ---------- public ---------- */
   static async from(urlOrConfig = null) {
     if (typeof urlOrConfig === 'string') {
-      const json = await fetch(urlOrConfig).then(r => r.json());
-      return new TourGuide(json);
+      // 注意：在鸿蒙 ArkWeb / file:// 等不透明来源下，fetch 本地 JSON 会被 CORS 拦截，
+      // 这里把失败原因讲清楚，方便上层改用「直接 import JSON」的方式。
+      try {
+        const res = await fetch(urlOrConfig);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        return new TourGuide(json);
+      } catch (err) {
+        throw new Error(
+          `引导配置加载失败（${urlOrConfig}）：${err && err.message ? err.message : err}。` +
+          '若运行在鸿蒙 Web 组件 / file:// 下，请改用 import JSON 直接传入配置对象。'
+        );
+      }
     }
     if (Array.isArray(urlOrConfig) || typeof urlOrConfig === 'object') {
       return new TourGuide(urlOrConfig);
@@ -237,6 +267,12 @@ export default class TourGuide {
   #destroy() {
     this.#clearHighlight();
     this.overlayEl?.remove();
+    // 移除视口监听，避免引导结束后仍持有引用
+    if (this._onViewportChange) {
+      window.removeEventListener('resize', this._onViewportChange);
+      window.removeEventListener('orientationchange', this._onViewportChange);
+      this._onViewportChange = null;
+    }
   }
 
   #handleSpecialCases(step) {

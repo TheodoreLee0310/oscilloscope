@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Oscilloscope simulator entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Smart Oscilloscope Interactive Simulation"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Oscilloscope"
+    },
+    {
+      "name": "reason_internet",
+      "value": "Used to load online maps and terrain photos"
+    },
+    {
+      "name": "reason_location",
+      "value": "Used by the VR waveform feature to read local terrain"
+    }
+  ]
+}

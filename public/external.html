@@ -2,16 +2,33 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <!-- 移动端 / 鸿蒙 ArkWeb 必需的视口声明：缺少它时 Web 组件会按 980px 桌面宽度渲染，
+       在手机和平板上界面会被整体缩小到难以操作 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>智波助梦</title>
-  <!-- 百度地图API -->
-  <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=tMz9vycikwq7TTyRRIyvLYd3t8xVkfve"></script>
+  <!-- 百度地图 API 改为在 src/external.js 中按需加载（loadScriptOnce），
+       避免第三方同步脚本阻塞首屏；离线时 VR 寻波自动降级为沙箱模式。
+       如需替换密钥，可在此处先声明：<script>window.SBQ_BAIDU_MAP_AK='你的AK'</script> -->
   <!-- Webpack 会在此页自动注入所需的 bundle 脚本和样式 -->
   <!-- 注意：此页专属于"外部面板/示波器"演示，互不干扰 -->
   <!-- 登录校验：未登录则跳转登录页 -->
   <script>
     (function () {
       try {
-        if (!localStorage.getItem('sbq_token')) {
+        // 登录守卫（快速路径：在 bundle 加载前先判断，避免主界面闪一下再跳走）
+        // 1) 优先读 localStorage；
+        // 2) 宿主禁用 DOM Storage 时（鸿蒙 ArkWeb 可能关闭），登录页会把
+        //    token 挂在 URL 上带过来，这里必须认；
+        // 3) 两者都没有才跳登录页；任何异常一律放行，避免白屏或重定向死循环。
+        var stored = null;
+        try { stored = localStorage.getItem('sbq_token'); } catch (e) { stored = null; }
+
+        var urlToken = null;
+        try {
+          urlToken = new URLSearchParams(window.location.search).get('sbq_token');
+        } catch (e) { urlToken = null; }
+
+        if (!stored && !urlToken) {
           window.location.replace('./login.html');
         }
       } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
@@ -588,6 +605,7 @@
           <div class="slider-tooltip">波形显示微调</div>
           <div class="slider"
                @mousedown="startSlider('time',null)"
+               @touchstart.prevent="startSlider('time',null)"
                :class="{active:sliderActive&&sliderActive.type==='time'}"
                :style="{ '--slider-value':calculateSliderPosition('time') }"
                role="slider"
@@ -628,6 +646,7 @@
           <div class="slider-tooltip">波形显示微调</div>
           <div class="slider"
                @mousedown="startSlider('volts',1)"
+               @touchstart.prevent="startSlider('volts',1)"
                :class="{active:sliderActive&&sliderActive.type==='volts'&&sliderActive.line===1}"
                :style="{ '--slider-value':calculateSliderPosition('volts',1) }"
                role="slider"
@@ -668,6 +687,7 @@
           <div class="slider-tooltip">波形显示微调</div>
           <div class="slider"
                @mousedown="startSlider('volts',2)"
+               @touchstart.prevent="startSlider('volts',2)"
                :class="{active:sliderActive&&sliderActive.type==='volts'&&sliderActive.line===2}"
                :style="{ '--slider-value':calculateSliderPosition('volts',2) }"
                role="slider"

@@ -5,12 +5,14 @@
   "main": "electron-main.js",
   "homepage": "./",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "set NODE_ENV=development && webpack serve --config webpack.config.js --hot",
+    "test": "node packaging/test-platform.js",
+    "test:platform": "node packaging/test-platform.js",
+    "test:smoke": "electron packaging/smoke-test.js",
+    "dev": "webpack serve --config webpack.config.js --hot",
     "start": "npm run dev",
-    "build": "set NODE_ENV=production && webpack --config webpack.config.js --mode production --optimization-minimize && node packaging/optimize-build.js",
+    "build": "webpack --config webpack.config.js --mode production && node packaging/optimize-build.js",
     "electron": "electron .",
-    "electron:dev": "set NODE_ENV=development && concurrently \"npm run dev\" \"wait-on http://localhost:8081 && electron .\"",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:8081 && electron .\"",
     "electron:build": "npm run dist",
     "electron:build-all": "npm run dist:all",
     "electron:build-all:local": "npm run dist:all:local",
@@ -25,7 +27,9 @@
     "dist:win:local": "npm run build && node packaging/build.js win local",
     "dist:mac": "npm run build && node packaging/build.js mac",
     "dist:linux": "npm run build && node packaging/build.js linux",
-    "release": "npm run build && electron-builder --publish=always"
+    "release": "npm run build && electron-builder --publish=always",
+    "harmonyos:sync": "node packaging/sync-harmonyos.js",
+    "build:harmonyos": "npm run build && node packaging/sync-harmonyos.js"
   },
   "build": {
     "appId": "com.oscilloscope.simulator",

@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "示波器仿真系统主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "智波助梦 · 示波器交互式虚拟仿真"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "智波助梦"
+    },
+    {
+      "name": "reason_internet",
+      "value": "用于加载在线地图与地形实景图"
+    },
+    {
+      "name": "reason_location",
+      "value": "用于 VR 寻波功能获取当前位置的地形信息"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# 鸿蒙工程构建产物
+/build/
+/entry/build/
+/.hvigor/
+/.cxx/
+/.clangd/
+/.clang-format
+/.clang-tidy
+/oh_modules/
+/.idea/
+*.iml
+local.properties
+
+# Web 产物同步目录：由 `npm run harmonyos:sync` 从仓库根目录的 docs/ 生成，
+# 内容与 docs/ 完全一致，因此不入库，避免仓库里存两份相同的构建产物。
+/entry/src/main/resources/rawfile/www/

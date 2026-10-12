@@ -11,6 +11,17 @@ import { renderSwitcher } from '../src/widgets/switcher.js';
 // 导入 TourGuide 模块（ES6 模块化）
 import { tourGuideManager } from './widgets/index.js';
 
+// ===== 平台适配层（浏览器 / Electron / 鸿蒙 ArkWeb 通用） =====
+// 提供：运行环境探测、分层安全存储、无阻塞 toast、远程脚本按需加载、视口订阅
+import {
+  runtime,
+  storage,
+  toast,
+  loadScriptOnce,
+  onViewportChange,
+  navigate,
+} from './utils/platform.js';
+
 // ===== 核心模块导入 =====
 import { OscilloscopeConstants } from '../scripts/constants.js';
 import * as WaveformUtilities from '../scripts/WaveformUtilities.js';
@@ -20,6 +31,16 @@ import CalibrationLogic from '../scripts/calibrationLogic.js';
 import { StepAdjustmentUtils } from '../scripts/StepAdjustmentUtils.js';
 import DeepSeekService from '../scripts/deepseekService.js';
 import KnowledgeBase from '../scripts/knowledgeBase.js';
+
+// ===== 可覆盖的运行时配置 =====
+// 部署到不同宿主（浏览器 / Electron / 鸿蒙 ArkWeb）时，可以不改源码，
+// 只需在页面里先声明 window.SBQ_BAIDU_MAP_AK 即可替换地图密钥。
+// 说明：百度地图 AK 是按域名授权白名单校验的，鸿蒙 rawfile 来源不在白名单时
+//       会加载失败 —— 此时 VR 寻波会自动退化为离线沙箱模式，不影响其他功能。
+const BAIDU_MAP_AK =
+  (typeof window !== 'undefined' && window.SBQ_BAIDU_MAP_AK) || 'tMz9vycikwq7TTyRRIyvLYd3t8xVkfve';
+const BAIDU_MAP_API_URL =
+  'https://api.map.baidu.com/api?v=3.0&ak=' + encodeURIComponent(BAIDU_MAP_AK);
 
 // ===== 全局变量定义 =====
 let app; // Vue 应用实例
@@ -468,17 +489,30 @@ function createVueApp() {
     },
     methods: {
       // ===== 登录用户 =====
+      // 注意：鸿蒙 ArkWeb 里 localStorage 可能被宿主关闭，这里统一走 platform.storage
+      // （localStorage → sessionStorage → cookie → 内存 分层降级，不会抛异常）
       loadCurrentUser() {
-        try {
-          this.currentUser = JSON.parse(localStorage.getItem('sbq_user') || 'null');
-        } catch (e) {
-          this.currentUser = null;
+        this.currentUser = storage.getJSON('sbq_user', null);
+
+        // 应用层登录守卫（页面内联守卫的补充）：
+        // 只有在"存储确实可持久化"时才强制跳转，否则会造成
+        // 存档丢失 → 跳登录 → 再跳回 → 无限重定向。
+        const hasToken = !!storage.getItem('sbq_token');
+        if (!hasToken && !this.currentUser) {
+          if (storage.persistent) {
+            navigate('./login.html');
+          } else {
+            // 宿主禁用了持久化存储：放行进入，但明确提示用户
+            console.warn('[auth] 当前宿主不支持持久化存储，已跳过登录守卫（存储后端: ' + storage.backend + '）');
+            toast('当前环境不支持保存登录状态，已以便携模式进入', 'warn', 3600);
+          }
         }
       },
       logout() {
-        localStorage.removeItem('sbq_token');
-        localStorage.removeItem('sbq_user');
-        window.location.href = './login.html';
+        storage.removeItem('sbq_token');
+        storage.removeItem('sbq_user');
+        this.currentUser = null;
+        navigate('./login.html');
       },
 
       // ===== Canvas 初始化 =====
@@ -513,6 +547,33 @@ function createVueApp() {
       initEventListeners() {
         document.addEventListener('mousemove', this.handleMouseMove);
         document.addEventListener('mouseup', this.handleMouseUp);
+        // 触摸设备（手机 / 平板 / 鸿蒙设备）不产生鼠标事件，这里补一套触摸监听，
+        // 复用同一批处理函数（内部统一用 getPointerX 归一化坐标）。
+        // passive:false 是为了在拖动滑块时能 preventDefault 阻止页面滚动。
+        document.addEventListener('touchmove', this.handleSliderTouchMove, { passive: false });
+        document.addEventListener('touchend', this.handleSliderTouchEnd, { passive: false });
+        document.addEventListener('touchcancel', this.handleSliderTouchEnd, { passive: false });
+      },
+
+      // ===== 指针坐标归一化（鼠标 / 触摸通用） =====
+      getPointerX(event) {
+        if (!event) return null;
+        if (typeof event.clientX === 'number') return event.clientX;
+        const list = (event.touches && event.touches.length)
+          ? event.touches
+          : event.changedTouches;
+        if (list && list.length) return list[0].clientX;
+        return null;
+      },
+      handleSliderTouchMove(event) {
+        if (!this.sliderActive) return;
+        // 拖动滑块时阻止页面跟着滚动
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        this.handleSliderMove(event);
+      },
+      handleSliderTouchEnd() {
+        if (!this.sliderActive) return;
+        this.handleSliderEnd();
       },
 
       // ===== 清理函数 =====
@@ -522,12 +583,15 @@ function createVueApp() {
           cancelAnimationFrame(this.animationId);
           this.animationId = null;
         }
-        
+
         // 移除所有事件监听器
         document.removeEventListener('mousemove', this.handleMouseMove);
         document.removeEventListener('mouseup', this.handleMouseUp);
         document.removeEventListener('mousemove', this.handleSliderMove);
         document.removeEventListener('mouseup', this.handleSliderEnd);
+        document.removeEventListener('touchmove', this.handleSliderTouchMove);
+        document.removeEventListener('touchend', this.handleSliderTouchEnd);
+        document.removeEventListener('touchcancel', this.handleSliderTouchEnd);
       },
 
       // ===== 绘图循环启动 =====
@@ -871,12 +935,18 @@ function createVueApp() {
         }
       },
       startSlider(type, line) {
+        // 同一滑块重复触发（部分设备会同时派发 mousedown 与 touchstart）时直接忽略
+        if (this.sliderActive && this.sliderActive.type === type && this.sliderActive.line === line) {
+          return;
+        }
+
         this.sliderActive = { type, line };
         this.sliderStartValue = type === 'time' 
           ? this.displayAdjustFactors.time 
           : this.displayAdjustFactors.volts[line];
         
-        // 记录起始鼠标位置
+        // 记录起始指针位置（鼠标 / 触摸通用）
+        this.sliderLastPointerX = null;
         this.sliderStartMouseX = null;
         
         document.addEventListener('mousemove', this.handleSliderMove);
@@ -894,7 +964,23 @@ function createVueApp() {
         const valueRange = range.max - range.min;
         const sensitivity = valueRange / 300; // 鼠标移动1px，变动1/300的范围，适应新的300px宽度
       
-        const adjustAmount = event.movementX * sensitivity;
+        // 位移量：优先用相邻两次事件的横坐标差值（鼠标 / 触摸通用）。
+        // 原实现用 event.movementX，而触摸事件没有该属性，
+        // 在鸿蒙手机 / 平板上会导致微调滑块完全拖不动。
+        const pointerX = this.getPointerX(event);
+        let deltaX;
+        if (pointerX !== null) {
+          if (this.sliderLastPointerX === null || this.sliderLastPointerX === undefined) {
+            this.sliderLastPointerX = pointerX;
+            return; // 第一次移动只记录基准点，不产生位移
+          }
+          deltaX = pointerX - this.sliderLastPointerX;
+          this.sliderLastPointerX = pointerX;
+        } else {
+          deltaX = event.movementX || 0;
+        }
+
+        const adjustAmount = deltaX * sensitivity;
       
         Object.assign(this, CalibrationLogic.updateAdjustFactor(this, type, line, adjustAmount));
         
@@ -908,6 +994,7 @@ function createVueApp() {
       },
       handleSliderEnd() {
         this.sliderActive = null;
+        this.sliderLastPointerX = null;
         document.removeEventListener('mousemove', this.handleSliderMove);
         document.removeEventListener('mouseup', this.handleSliderEnd);
       },
@@ -980,7 +1067,7 @@ function createVueApp() {
       resetTrigger() {
         if (!this.isRunning) {
           console.log('暂停状态下无法重置触发电平，请先恢复运行');
-          alert('暂停状态下无法重置触发电平，请先恢复运行');
+          toast('暂停状态下无法重置触发电平，请先恢复运行', 'warn');
           return;
         }
         
@@ -1041,7 +1128,7 @@ function createVueApp() {
               // 如果有通道未激活，提示用户并保持原来的显示模式
               const modeName = mode === 'overlay' ? '同向叠加' : '垂直叠加';
               console.log(`请先激活两个通道后再使用${modeName}模式`);
-              alert(`${modeName}模式需要两个通道都激活！请先开启通道1和通道2。`);
+              toast(`${modeName}模式需要两个通道都激活！请先开启通道1和通道2。`, 'warn');
               return;
             }
           } else {
@@ -1064,12 +1151,25 @@ function createVueApp() {
 
       // ===== VR寻波功能方法 =====
       initBaiduMap() {
+        return this._initBaiduMapAsync();
+      },
+      // 百度地图 JS API 改为「按需加载」：不再在 <head> 里同步阻塞加载。
+      // 原因：鸿蒙 ArkWeb / 移动网络下，同步外链脚本会让首屏一直白屏，
+      //       而地图只在用户点击"初始化地图"时才真正需要。
+      async _initBaiduMapAsync() {
         if (typeof BMap === 'undefined') {
-          console.warn('百度地图API未加载，进入沙箱模式');
-          this.vrwave.sandboxMode = true;
-          this.vrwave.mapLoaded = true;
-          this.enterSandboxMode();
-          return;
+          const ok = await loadScriptOnce(BAIDU_MAP_API_URL, {
+            timeout: 10000,
+            globalCheck: () => typeof BMap !== 'undefined',
+          });
+          if (!ok) {
+            console.warn('百度地图API不可用（离线或域名未授权），进入沙箱模式');
+            toast('地图服务不可用，已切换为离线沙箱模式', 'warn', 3200);
+            this.vrwave.sandboxMode = true;
+            this.vrwave.mapLoaded = true;
+            this.enterSandboxMode();
+            return;
+          }
         }
         try {
           const map = new BMap.Map(this.$refs.baiduMap || 'baidu-map-container');
@@ -1142,7 +1242,7 @@ function createVueApp() {
               this.searchNearbyTerrain(point.lng, point.lat);
             });
           } else {
-            alert('定位失败，请检查定位权限或手动在地图上点击选择位置。');
+            toast('定位失败，请检查定位权限或手动在地图上点击选择位置。', 'warn', 4000);
           }
         });
       },
@@ -1533,7 +1633,7 @@ function createVueApp() {
           this.selectTerrain(bestMatch.terrain);
           console.log(`波形反向匹配结果: ${bestMatch.terrain.name} (得分: ${bestMatch.score})`);
         } else {
-          alert('无法从当前波形匹配到合适的地形类型');
+          toast('无法从当前波形匹配到合适的地形类型', 'warn');
         }
       },
 
@@ -1552,7 +1652,7 @@ function createVueApp() {
         this.imagewave.dragOver = false;
         const file = event.dataTransfer.files[0];
         if (!file || !file.type.startsWith('image/')) {
-          alert('请上传图片文件！');
+          toast('请上传图片文件！', 'warn');
           return;
         }
         this.processImageFile(file);
@@ -2128,7 +2228,7 @@ function createVueApp() {
 
       async analyzeWithAI() {
         if (!this.imagewave.imageUrl) {
-          alert('请先上传图片！');
+          toast('请先上传图片！', 'warn');
           return;
         }
 
@@ -2498,5 +2598,7 @@ if (typeof document !== 'undefined' && document.readyState === 'loading') {
   bootExternalSwitcher();
 }
 
-//启动引导框
-tourGuideManager.start();
+//启动引导框（失败只告警，不能影响主流程）
+tourGuideManager.start().catch((err) => {
+  console.warn('[TourGuide] 新手引导未启动:', err);
+});

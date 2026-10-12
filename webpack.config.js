@@ -6,7 +6,17 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 // 判断是否为开发模式
-const isDev = process.env.NODE_ENV !== 'production';
+// 修复说明：原来只看 process.env.NODE_ENV，而它依赖 npm script 里的
+// `set NODE_ENV=production`。`set` 只在 Windows cmd 下有效，在 PowerShell /
+// bash / macOS / Linux 上会静默失效，导致 `npm run build` 打出的是**未压缩的
+// 开发版产物**（本仓库一度出现过 8.6MB 的 docs/ 就是这个原因）。
+// 现在改为以 CLI 的 --mode 为第一依据，并兼容 `webpack serve`。
+const cliModeIndex = process.argv.indexOf('--mode');
+const cliMode = cliModeIndex !== -1 ? process.argv[cliModeIndex + 1] : null;
+const isServe = process.argv.includes('serve');
+const isDev = isServe
+  ? (cliMode ? cliMode !== 'production' : true)
+  : (cliMode ? cliMode !== 'production' : process.env.NODE_ENV !== 'production');
 module.exports = {
   mode: isDev ? 'development' : 'production',
   cache: isDev,

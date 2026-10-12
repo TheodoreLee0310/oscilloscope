@@ -6,6 +6,9 @@ import * as TWEEN from '@tweenjs/tween.js'; // 动画库
 // ===== 导入 switcher 模块（ES6 导入，并在 DOM 就绪后初始化） =====
 import { renderSwitcher } from '../src/widgets/switcher.js';
 
+// ===== 平台适配层（浏览器 / Electron / 鸿蒙 ArkWeb 通用） =====
+import { runtime, toast, onViewportChange } from './utils/platform.js';
+
 
 // ===== 导入自定义模块 =====
 import { CONFIG } from './configLoader';
@@ -32,6 +35,7 @@ let crtShell;  // CRT外壳
 let materialManager;  // 材质管理器
 let deferredUiInitialized = false; // 首屏后延迟初始化的 UI 模块状态
 let loadingScreen; // 内部页加载动画
+let disposeViewportListener = null; // 视口变化监听的取消函数
 
 // 创建 TWEEN Group 管理动画（解决 TWEEN.update() 弃用问题）
 export const tweenGroup = new TWEEN.Group();
@@ -135,7 +139,9 @@ async function init() {
   animate(); // 开始动画循环
   
   // 窗口自适应
-  window.addEventListener('resize', onWindowResize);   // 窗口大小调整事件监听
+  // 窗口自适应：统一订阅 resize / 旋转 / 软键盘引起的视口变化
+  // （鸿蒙手机上旋转屏幕、弹出输入法都会触发，单个 resize 事件不足以覆盖）
+  disposeViewportListener = onViewportChange(() => onWindowResize());
 
   console.log(`[internal:perf] core scene ready in ${(performance.now() - appStart).toFixed(1)}ms`);
   if (getLoadingScreen()) {
@@ -162,15 +168,56 @@ function initCamera() {
   camera.position.set(CONFIG.camera.position.x, CONFIG.camera.position.y, CONFIG.camera.position.z); // 设置相机位置
 }
 
+// ===== WebGL 可用性检测 =====
+// 鸿蒙 ArkWeb、部分虚拟化 / 远程桌面环境下 WebGL 可能不可用。
+// 此时 new THREE.WebGLRenderer() 会直接抛错，页面会永远停在
+// "正在同步材质与贴图…" 。必须提前拦截并给出可读提示。
+function isWebGLAvailable() {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl2') ||
+        canvas.getContext('webgl') ||
+        canvas.getContext('experimental-webgl'))
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+// WebGL 上下文丢失标记（移动端切后台、显存紧张时系统会回收 GPU 上下文）
+let contextLost = false;
+
 // ===== 渲染器初始化 =====
 function initRenderer() {
+  if (!isWebGLAvailable()) {
+    throw new Error('WEBGL_UNAVAILABLE');
+  }
+
   renderer = new THREE.WebGLRenderer({ antialias: true }); // 创建渲染器
   
-  // 高DPI屏幕适配
+  // 高DPI屏幕适配：移动端 GPU 较弱，上限压到 1.5 以换取流畅度
   const devicePixelRatio = window.devicePixelRatio || 1;
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); // 限制最大DPI比率为2
+  const maxPixelRatio = runtime.isMobile ? 1.5 : 2;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio)); // 限制最大DPI比率
   renderer.setSize(window.innerWidth, window.innerHeight); // 设置渲染器大小
   
+  // 上下文丢失 / 恢复：没有这两个监听器时，切后台回来就是永久黑屏
+  renderer.domElement.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault(); // 阻止默认行为，浏览器才会尝试恢复上下文
+    contextLost = true;
+    console.warn('[webgl] 上下文丢失，已暂停渲染');
+    if (getLoadingScreen()) getLoadingScreen().setStatus('图形上下文丢失，等待恢复…');
+  }, false);
+
+  renderer.domElement.addEventListener('webglcontextrestored', () => {
+    contextLost = false;
+    console.warn('[webgl] 上下文已恢复');
+    if (getLoadingScreen()) getLoadingScreen().complete('图形上下文已恢复');
+    if (renderer && scene && camera) renderer.render(scene, camera);
+  }, false);
+
   document.body.appendChild(renderer.domElement); // 将渲染器添加到文档中
 }
 
@@ -699,6 +746,9 @@ function updateScreenAndGlowPoint() {
 
 // ===== 窗口大小调整 =====
 function onWindowResize() {
+  // 渲染器尚未就绪（例如 WebGL 不可用）时直接返回，避免空引用报错
+  if (!renderer || !camera) return;
+
   // 获取实际显示尺寸，考虑DPI缩放
   const devicePixelRatio = window.devicePixelRatio || 1;
   const width = window.innerWidth;
@@ -707,9 +757,9 @@ function onWindowResize() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   
-  // 设置渲染器尺寸，考虑高DPI
+  // 设置渲染器尺寸，考虑高DPI（移动端上限 1.5，理由同 initRenderer）
   renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); // 限制最大DPI比率为2
+  renderer.setPixelRatio(Math.min(devicePixelRatio, runtime.isMobile ? 1.5 : 2));
   
   // 更新标签系统
   if (labelSystem) {
@@ -724,6 +774,13 @@ function onWindowResize() {
 
 // ===== 动画循环 =====
 function animate(timestamp) {
+  // 上下文丢失或页面不可见时跳过渲染：
+  // 既避免在丢失的上下文上反复报错，也省电（移动端/鸿蒙设备很关键）。
+  if (contextLost || (typeof document !== 'undefined' && document.hidden)) {
+    requestAnimationFrame(animate);
+    return;
+  }
+
   requestAnimationFrame(animate);
   
   // 更新控制器
@@ -769,9 +826,14 @@ function animate(timestamp) {
 // ===== 启动应用 =====
 init().catch(error => {
   console.error('应用初始化失败:', error);
+  const webglFailed = error && error.message === 'WEBGL_UNAVAILABLE';
+  const message = webglFailed
+    ? '当前设备或容器不支持 WebGL，无法渲染三维原理演示'
+    : '内部视图加载失败，请刷新重试';
   if (getLoadingScreen()) {
-    loadingScreen.fail('内部视图加载失败，请刷新重试');
+    loadingScreen.fail(message);
   }
+  toast(message, 'error', 5000);
 });
 
 // ===== 初始化右上角切换控件（内部页） =====

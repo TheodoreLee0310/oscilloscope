@@ -1,0 +1,8 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "示波器仿真系统主模块（ArkWeb 容器）",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}

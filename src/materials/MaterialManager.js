@@ -92,6 +92,41 @@ export class MaterialManager {
   }
 
   /**
+   * 生成占位贴图（贴图加载失败时使用）
+   * 画一个中性灰加细边框，避免材质塌成纯黑；同时保证加载流程不中断。
+   * @param {string} name - 原贴图名称（便于排查）
+   * @returns {THREE.Texture}
+   */
+  createFallbackTexture(name) {
+    try {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#9a9a9a';
+      ctx.fillRect(0, 0, size, size);
+      ctx.strokeStyle = '#8a8a8a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.flipY = false;
+      texture.name = 'fallback:' + name;
+      return texture;
+    } catch (e) {
+      // 无 DOM 等极端情况：退化为空贴图，至少不抛异常
+      const texture = new THREE.Texture();
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.flipY = false;
+      return texture;
+    }
+  }
+
+  /**
    * 加载单个贴图
    * @param {string} name - 贴图名称
    * @param {string} path - 贴图路径
@@ -133,8 +168,12 @@ export class MaterialManager {
           console.log(`贴图加载进度: ${name} - ${(progress.loaded / progress.total * 100)}%`);
         },
         (error) => {
-          console.warn(`贴图加载失败: ${name} (${path})`, error);
-          reject(error);
+          // 贴图加载失败不再 reject：
+          // 鸿蒙 ArkWeb（不透明来源）或资源路径异常时 TextureLoader 会直接失败，
+          // 一旦 reject 会让外层 Promise.all 整体失败，导致"所有"贴图一起丢失。
+          // 改为返回占位贴图，让其余贴图照常加载，页面不至于整页停在加载层。
+          console.warn(`贴图加载失败，改用占位贴图: ${name} (${path})`, error);
+          resolve(this.createFallbackTexture(name));
         }
       );
     });

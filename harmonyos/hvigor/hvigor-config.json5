@@ -1,0 +1,15 @@
+{
+  /*
+   * hvigor 构建工具自身及其插件的版本。
+   * 如果 DevEco Studio 提示版本不一致，直接点 "Sync Now" 让它自动改写即可；
+   * 具体版本号取决于本机安装的 DevEco Studio 版本。
+   */
+  "hvigorVersion": "5.0.2",
+  "dependencies": {
+    "@ohos/hvigor-ohos-plugin": "5.0.2"
+  },
+  "execution": {},
+  "logging": {},
+  "debugging": {},
+  "nodeOptions": {}
+}

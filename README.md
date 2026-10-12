@@ -26,6 +26,7 @@
 | 参数面板 | dat.GUI |
 | 构建工具 | Webpack 5 + webpack-dev-server 5 |
 | 桌面端 | Electron 28 + electron-builder |
+| 鸿蒙端 | ArkWeb（Web 组件）+ ArkTS 容器，见 [`harmonyos/`](harmonyos/README.md) |
 
 ## 目录结构
 
@@ -84,6 +85,27 @@ npm run dev
 | `npm run electron:dev` | 同时启动开发服务器与 Electron |
 | `npm run dist` | 打包当前平台桌面安装包 |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | 打包指定平台 |
+| `npm run build:harmonyos` | 构建 Web 产物并同步进鸿蒙工程（`harmonyos/.../rawfile/www`） |
+| `npm run harmonyos:sync` | 只做同步（要求 `docs/` 已存在） |
+| `npm test` | 平台适配层单元测试（存储降级 / URL 桥接 / 鸿蒙 UA 识别） |
+| `npm run test:smoke` | 用 Electron 真实内核跑一遍构建产物做冒烟测试 |
+
+## 鸿蒙（HarmonyOS）应用
+
+本项目的 Web 前端**不依赖 Node / Electron**，因此可以原样装进鸿蒙的 ArkWeb（Web 组件）中运行。
+仓库内的 [`harmonyos/`](harmonyos/README.md) 是一个完整的 DevEco Studio 工程：
+
+```bash
+npm run build:harmonyos      # 1. 构建并同步 Web 产物到 rawfile
+# 2. 用 DevEco Studio 5.0+ 打开 harmonyos/ 目录，等待 Sync
+# 3. 连接鸿蒙设备，点 Run
+```
+
+- 完整的构建步骤、真机验收清单与排查手册：**[`harmonyos/README.md`](harmonyos/README.md)**
+- 兼容性评估、已改造项与待实机验证项：**[`HARMONYOS.md`](HARMONYOS.md)**
+
+> Electron 桌面壳（`electron-main.js`）无法在鸿蒙上运行，这是平台定位决定的；
+> 鸿蒙端走的是「同一份 Web 产物 + ArkWeb 容器」的路线。
 
 ## 页面说明
 
