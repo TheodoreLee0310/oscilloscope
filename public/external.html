@@ -97,7 +97,7 @@
           </div>
 
           <div v-if="vrwave.sandboxMode" class="vrwave-sandbox-notice">
-            🗺️ 离线示意地图：地图 API 不可用，已启用内置模拟数据 —— 点击地图任意位置、或点「获取当前位置」，即可演示完整的地形→波形流程
+            🗺️ 当前为离线示意地图 —— 在线地图未能加载（离线 / AK 未授权 / 域名白名单限制）。点击地图任意位置即可查看地形，或点下方「🔄 重试在线地图」。
           </div>
 
           <div class="vrwave-controls">
@@ -109,6 +109,9 @@
               </button>
               <button @click="getCurrentLocation" class="vrwave-btn vrwave-locate-btn" :disabled="!vrwave.mapLoaded">
                 📍 获取当前位置
+              </button>
+              <button v-if="vrwave.mockMapActive" @click="retryBaiduMap" class="vrwave-btn vrwave-retry-btn">
+                🔄 重试在线地图
               </button>
             </div>
             

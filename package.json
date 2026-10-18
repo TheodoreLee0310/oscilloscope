@@ -5,9 +5,10 @@
   "main": "electron-main.js",
   "homepage": "./",
   "scripts": {
-    "test": "node packaging/test-platform.js && node packaging/test-mockmap.js",
+    "test": "node packaging/test-platform.js && node packaging/test-mockmap.js && node packaging/test-baidumap.js",
     "test:platform": "node packaging/test-platform.js",
     "test:mockmap": "node packaging/test-mockmap.js",
+    "test:baidumap": "node packaging/test-baidumap.js",
     "test:smoke": "electron packaging/smoke-test.js",
     "dev": "webpack serve --config webpack.config.js --hot",
     "start": "npm run dev",

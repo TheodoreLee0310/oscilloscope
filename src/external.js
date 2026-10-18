@@ -12,15 +12,11 @@ import { renderSwitcher } from '../src/widgets/switcher.js';
 import { tourGuideManager } from './widgets/index.js';
 
 // ===== 平台适配层（浏览器 / Electron / 鸿蒙 ArkWeb 通用） =====
-// 提供：运行环境探测、分层安全存储、无阻塞 toast、远程脚本按需加载、视口订阅
-import {
-  runtime,
-  storage,
-  toast,
-  loadScriptOnce,
-  onViewportChange,
-  navigate,
-} from './utils/platform.js';
+// 提供：分层安全存储、无阻塞 toast、页面内导航
+import { storage, toast, navigate } from './utils/platform.js';
+
+// ===== 百度地图加载器（官方异步写法，避开 document.write 陷阱） =====
+import { ensureBaiduMap, isBaiduMapReady, getBaiduAk } from './utils/baiduMap.js';
 
 // ===== 离线兜底资源（不依赖网络的模拟地图与地形示意图） =====
 import { MockMap } from './utils/mockMap.js';
@@ -36,15 +32,10 @@ import { StepAdjustmentUtils } from '../scripts/StepAdjustmentUtils.js';
 import DeepSeekService from '../scripts/deepseekService.js';
 import KnowledgeBase from '../scripts/knowledgeBase.js';
 
-// ===== 可覆盖的运行时配置 =====
-// 部署到不同宿主（浏览器 / Electron / 鸿蒙 ArkWeb）时，可以不改源码，
-// 只需在页面里先声明 window.SBQ_BAIDU_MAP_AK 即可替换地图密钥。
-// 说明：百度地图 AK 是按域名授权白名单校验的，鸿蒙 rawfile 来源不在白名单时
-//       会加载失败 —— 此时 VR 寻波会自动退化为离线沙箱模式，不影响其他功能。
-const BAIDU_MAP_AK =
-  (typeof window !== 'undefined' && window.SBQ_BAIDU_MAP_AK) || 'tMz9vycikwq7TTyRRIyvLYd3t8xVkfve';
-const BAIDU_MAP_API_URL =
-  'https://api.map.baidu.com/api?v=3.0&ak=' + encodeURIComponent(BAIDU_MAP_AK);
+// ===== 地图密钥 =====
+// 已统一收敛到 src/utils/baiduMap.js：
+//   · 默认 AK 内置一份，可在页面里用 window.SBQ_BAIDU_MAP_AK 覆盖（无需改源码）
+//   · 加载方式必须走官方「异步加载」（URL 带 &callback=），否则 SDK 永远不出现
 
 // ===== 全局变量定义 =====
 let app; // Vue 应用实例
@@ -1165,12 +1156,28 @@ function createVueApp() {
       initBaiduMap() {
         return this._initBaiduMapAsync();
       },
-      // 百度地图 JS API 改为「按需加载」：不再在 <head> 里同步阻塞加载。
-      // 原因：鸿蒙 ArkWeb / 移动网络下，同步外链脚本会让首屏一直白屏，
-      //       而地图只在用户点击"初始化地图"时才真正需要。
+
+      /** 已退到离线示意地图后，允许重新尝试加载在线地图 */
+      retryBaiduMap() {
+        if (this._mockMap) {
+          try { this._mockMap.destroy(); } catch (e) { /* 忽略 */ }
+          this._mockMap = null;
+        }
+        this.vrwave.mockMapActive = false;
+        this.vrwave.sandboxMode = false;
+        this.vrwave.mapLoaded = false;
+        this.vrwave.mapInstance = null;
+        toast('正在重新加载在线地图…', 'info', 1600);
+        return this.initBaiduMap();
+      },
+      // 百度地图 JS API 按需加载。
+      // 关键：必须走官方「异步加载」写法（URL 带 &callback=）。
+      // 入口脚本本身是用 document.write 注入真 SDK 的，而 document.write 只在
+      // 页面解析期有效；动态插入（async）会被浏览器忽略 → BMap 永远不出现。
+      // 详细说明见 src/utils/baiduMap.js 顶部注释。
       async _initBaiduMapAsync() {
-        if (typeof BMap === 'undefined') {
-          // 设备明确处于离线状态时不用等 6 秒超时，直接上离线示意地图，
+        if (!isBaiduMapReady()) {
+          // 设备明确处于离线状态时不用等超时，直接上离线示意地图，
           // 否则演示时会先空白几秒，看起来像卡住了。
           if (typeof navigator !== 'undefined' && navigator.onLine === false) {
             console.warn('[VR寻波] 设备离线，直接使用离线示意地图');
@@ -1178,17 +1185,13 @@ function createVueApp() {
             return;
           }
 
-          const ok = await loadScriptOnce(BAIDU_MAP_API_URL, {
-            timeout: 6000,
-            globalCheck: () => typeof BMap !== 'undefined',
-          });
+          const ok = await ensureBaiduMap({ ak: getBaiduAk(), timeout: 10000 });
           if (!ok) {
-            // 地图 API 不可用（离线 / AK 未授权 / 域名被拦截）：
-            // 不再只弹一句"不可用"，而是挂上内置的离线模拟地图，
-            // 让 VR 寻波的整条交互链路依然可以完整演示。
-            console.warn('[VR寻波] 百度地图 API 不可用，切换为离线模拟地图');
+            // 确实拿不到 SDK（网络不可达 / AK 未授权 / 域名白名单不含当前来源）：
+            // 退回内置离线示意地图，保证整条演示链路仍然可用。
+            console.warn('[VR寻波] 百度地图 SDK 未就绪，切换为离线示意地图');
             this.initMockMap();
-            toast('地图 API 不可用，已切换为离线示意地图（模拟数据）', 'warn', 3200);
+            toast('在线地图加载失败，已切换为离线示意地图', 'warn', 3200);
             return;
           }
         }
@@ -1412,23 +1415,59 @@ function createVueApp() {
         });
       },
 
+      /**
+       * 在地图上点击选点 → 立即显示坐标与对应地形。
+       *
+       * 关键改进：不再把全部逻辑塞进「逆地理编码」的回调里。
+       * BMap.Geocoder 是独立服务，AK 没开通该服务 / 配额用尽时会静默失败，
+       * 原实现于是表现为"点了地图没有任何反应"。
+       * 现在先本地就近判定地形给即时反馈，再用逆地理编码去修正地址。
+       */
       handleMapClick(point) {
         if (!this.vrwave.mapInstance) return;
-        const marker = new BMap.Marker(point);
-        this.vrwave.mapInstance.clearOverlays();
-        this.vrwave.mapInstance.addOverlay(marker);
 
-        const geoc = new BMap.Geocoder();
-        geoc.getLocation(point, (rs) => {
-          const addr = rs.addressComponents;
-          this.vrwave.locationInfo = {
-            lng: point.lng,
-            lat: point.lat,
-            address: rs.address
-          };
-          this.inferTerrainFromLocation(addr);
-          this.searchNearbyTerrain(point.lng, point.lat);
-        });
+        // 打点（失败不影响后续展示）
+        try {
+          this.vrwave.mapInstance.clearOverlays();
+          this.vrwave.mapInstance.addOverlay(new BMap.Marker(point));
+        } catch (e) {
+          console.warn('[VR寻波] 打点失败:', e);
+        }
+
+        // ① 立即响应：坐标 + 就近视作的地形
+        this.vrwave.locationInfo = {
+          lng: point.lng,
+          lat: point.lat,
+          address: '坐标 (' + point.lng.toFixed(4) + ', ' + point.lat.toFixed(4) + ')',
+        };
+
+        const near = this.findNearestTerrainLocation(point.lng, point.lat);
+        if (near) {
+          this.vrwave.locationInfo.address = near.address || near.name;
+          const terrain = this.vrwave.terrainTypes.find((t) => t.id === near.terrainType);
+          if (terrain) this.selectTerrain(terrain);
+        }
+        this.searchNearbyTerrain(point.lng, point.lat);
+
+        // ② 异步逆地理编码：成功则用真实地址修正地形
+        if (typeof BMap.Geocoder !== 'function') {
+          console.warn('[VR寻波] 当前 SDK 无逆地理编码能力，沿用就近地形');
+          return;
+        }
+        try {
+          const geocoder = new BMap.Geocoder();
+          geocoder.getLocation(point, (rs) => {
+            if (!rs) return;
+            this.vrwave.locationInfo = {
+              lng: point.lng,
+              lat: point.lat,
+              address: rs.address || this.vrwave.locationInfo.address,
+            };
+            this.inferTerrainFromLocation(rs.addressComponents || rs.address || {});
+          });
+        } catch (e) {
+          console.warn('[VR寻波] 逆地理编码调用失败，沿用就近地形:', e);
+        }
       },
 
       async searchNearbyTerrain(lng, lat) {
