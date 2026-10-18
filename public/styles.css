@@ -376,6 +376,20 @@ input[type="number"] {
   opacity: 1;
 }
 
+/* 右侧显示区容器
+   原来这里没有任何样式：作为 flex 子项，它按内容宽度（画布自带的 800px）收缩，
+   窗口再大也不会变宽，右边空出一大块 —— 这就是"波形 / 照片显得太小"的根因。
+   现在让它吃掉 aside 之外的全部宽度，显示区随之放大。 */
+.right-content-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
 /* 示波器显示区样式 */
 .oscilloscope {
   /* 必须有定位：否则内部的 .terrain-image-overlay（absolute + inset:0）
@@ -383,6 +397,8 @@ input[type="number"] {
      导致用户点一次照片后无法继续在地图上选点。 */
   position: relative;
   flex: 1;
+  max-width: 100%;
+  max-height: 100%;
   background: #1a1a1a;
   display: flex;
   align-items: center;
@@ -396,6 +412,9 @@ canvas {
   width: 100%;
   height: 100%;
   display: block;
+  /* 显示区放大后，用 contain 保证画布按自身比例（800×400）缩放，
+     不会被容器拉伸变形 */
+  object-fit: contain;
   /* 高DPI屏幕适配 */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
@@ -1990,8 +2009,9 @@ input:disabled {
 }
 
 .terrain-real-image {
-  max-width: 100%;
-  max-height: 75%;
+  /* 放大地形实景图：原来只有 75% 高度，两侧留白太多 */
+  max-width: 96%;
+  max-height: 92%;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
