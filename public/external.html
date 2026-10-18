@@ -113,6 +113,11 @@
               <button v-if="vrwave.mockMapActive" @click="retryBaiduMap" class="vrwave-btn vrwave-retry-btn">
                 🔄 重试在线地图
               </button>
+              <button @click="openTerrainImage"
+                      class="vrwave-btn vrwave-image-btn"
+                      :disabled="!(vrwave.terrainImageUrl || vrwave.matchedLocationImageUrl)">
+                🖼️ 查看实景图
+              </button>
             </div>
             
             <div class="vrwave-map-container">
@@ -794,8 +799,15 @@
             <img :src="imagewave.imageUrl" class="display-image" alt="已上传的图片">
           </div>
           
-          <!-- VR寻波地形图片叠加 -->
-          <div class="terrain-image-overlay" v-if="(vrwave.terrainImageUrl || vrwave.matchedLocationImageUrl) && expStep === 'vrwave'">
+          <!-- VR寻波地形图片叠加
+               注意：必须有出口 —— 点右上角 ✕ 或点照片外的空白处都能关闭，
+               关闭后可以继续在地图上选点查询。 -->
+          <div class="terrain-image-overlay"
+               v-if="vrwave.showTerrainImage && (vrwave.terrainImageUrl || vrwave.matchedLocationImageUrl) && expStep === 'vrwave'"
+               @click.self="closeTerrainImage">
+            <button class="terrain-image-close"
+                    @click.stop="closeTerrainImage"
+                    title="关闭照片，继续在地图上查询">✕</button>
             <img v-if="vrwave.matchedLocationImageUrl" :src="vrwave.matchedLocationImageUrl" :alt="vrwave.matchedLocation ? vrwave.matchedLocation.name + '实景' : '地形实景'" class="terrain-real-image">
             <img v-else-if="vrwave.terrainImageUrl" :src="vrwave.terrainImageUrl" :alt="vrwave.currentTerrain ? vrwave.currentTerrain.name + '地形' : '地形图片'" class="terrain-real-image">
             <div class="terrain-image-label" v-if="vrwave.currentTerrain">
@@ -805,22 +817,10 @@
             <div class="terrain-image-location" v-if="vrwave.matchedLocation">
               📍 {{ vrwave.matchedLocation.name }}
             </div>
+            <div class="terrain-image-hint">点空白处或右上角 ✕ 关闭，可继续在地图上选点</div>
           </div>
           <canvas ref="oscilloscope" width="800" height="400"></canvas>
         </section>
-        
-        <!-- VR寻波图片显示区域 -->
-        <div class="vrwave-image-panel" v-if="expStep === 'vrwave' && vrwave.showImage && (vrwave.terrainImageUrl || vrwave.matchedLocationImageUrl)">
-          <div class="vrwave-image-header">
-            <div class="vrwave-image-title">
-              <span v-if="vrwave.currentTerrain">{{ vrwave.currentTerrain.icon }} {{ vrwave.currentTerrain.name }}地形实景</span>
-              <span v-if="vrwave.matchedLocation"> - 📍 {{ vrwave.matchedLocation.name }}</span>
-            </div>
-            <button @click="vrwave.showImage = false" class="vrwave-image-close" title="关闭图片">✕</button>
-          </div>
-          <img v-if="vrwave.matchedLocationImageUrl" :src="vrwave.matchedLocationImageUrl" class="vrwave-location-image" :alt="vrwave.matchedLocation ? vrwave.matchedLocation.name : '地形图片'">
-          <img v-else-if="vrwave.terrainImageUrl" :src="vrwave.terrainImageUrl" class="vrwave-location-image" :alt="vrwave.currentTerrain ? vrwave.currentTerrain.name : '地形图片'">
-        </div>
       </div>
     </main>
 

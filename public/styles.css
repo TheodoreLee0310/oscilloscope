@@ -378,6 +378,10 @@ input[type="number"] {
 
 /* 示波器显示区样式 */
 .oscilloscope {
+  /* 必须有定位：否则内部的 .terrain-image-overlay（absolute + inset:0）
+     会按最近的定位祖先（main）铺满整个内容区，把左侧地图面板一起盖住，
+     导致用户点一次照片后无法继续在地图上选点。 */
+  position: relative;
   flex: 1;
   background: #1a1a1a;
   display: flex;
@@ -2021,6 +2025,34 @@ input:disabled {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 地形图片叠加层的关闭按钮与提示 —— 保证照片有出口，能继续查询 */
+.terrain-image-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 11;
+  transition: background 0.15s ease;
+}
+
+.terrain-image-close:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.terrain-image-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 /* ===== 图片识别波形面板样式 ===== */

@@ -209,6 +209,9 @@ function createVueApp() {
         selectedTerrain: null,
         matchedLocation: null,
         terrainImageUrl: null,
+        // 地形实景图是否展开。必须有这个开关：否则图片一旦出现就没有出口，
+        // 用户无法关掉它继续在地图上选点（叠加层会挡住操作区）。
+        showTerrainImage: false,
         matchedLocationImageUrl: null,
         sandboxMode: false,
         nearbyPOIs: [],
@@ -1302,6 +1305,8 @@ function createVueApp() {
             selectedKey: start.name,
           });
           this.applyMockLocation(start, { silent: true });
+          // 进入页面时的默认地点只是把面板填满，不要立刻弹出照片挡住波形
+          this.vrwave.showTerrainImage = false;
         }
       },
 
@@ -1707,9 +1712,18 @@ function createVueApp() {
         img.src = unsplashUrl;
       },
 
+      /** 关闭照片叠加层（保留图片地址，方便再次打开） */
       closeTerrainImage() {
-        this.vrwave.terrainImageUrl = null;
-        this.vrwave.matchedLocationImageUrl = null;
+        this.vrwave.showTerrainImage = false;
+      },
+
+      /** 重新打开最近一次查询到的地形实景图 */
+      openTerrainImage() {
+        if (!this.vrwave.terrainImageUrl && !this.vrwave.matchedLocationImageUrl) {
+          toast('请先在地图上选点，或选择一种地形', 'warn', 2000);
+          return;
+        }
+        this.vrwave.showTerrainImage = true;
       },
 
       inferTerrainFromLocation(addr) {
@@ -1737,6 +1751,8 @@ function createVueApp() {
         this.vrwave.selectedTerrain = terrain.id;
         this.vrwave.currentTerrain = { ...terrain };
         this.vrwave.terrainImageUrl = this.vrwave.terrainImages[terrain.id] || null;
+        // 每次主动查询都展开照片；用户关掉后可以继续选点，不会卡住
+        this.vrwave.showTerrainImage = true;
         this.matchTerrainToLocation(terrain.id);
       },
 
