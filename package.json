@@ -31,6 +31,8 @@
     "dist:linux": "npm run build && node packaging/build.js linux",
     "release": "npm run build && electron-builder --publish=always",
     "harmonyos:sync": "node packaging/sync-harmonyos.js",
+    "harmonyos:build": "node packaging/build-harmonyos.js",
+    "harmonyos:verify": "node packaging/verify-harmonyos.js",
     "build:harmonyos": "npm run build && node packaging/sync-harmonyos.js"
   },
   "build": {

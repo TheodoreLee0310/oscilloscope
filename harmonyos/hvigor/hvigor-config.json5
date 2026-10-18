@@ -1,13 +1,16 @@
 {
   /*
-   * hvigor 构建工具自身及其插件的版本。
-   * 如果 DevEco Studio 提示版本不一致，直接点 "Sync Now" 让它自动改写即可；
-   * 具体版本号取决于本机安装的 DevEco Studio 版本。
+   * hvigor 构建工具配置（DevEco Studio 5.0 之后的新格式）
+   *
+   * 注意：不要写成老格式
+   *     { "hvigorVersion": "5.0.2", "dependencies": { "@ohos/hvigor-ohos-plugin": "5.0.2" } }
+   * 老格式会让 hvigor 去 npm 仓库下载 @ohos/hvigor-ohos-plugin，
+   * 而该插件只随 DevEco Studio 分发、并不在 npm 上，结果必然 404 失败。
+   *
+   * 现在的写法：hvigor 与插件版本由 IDE 自带工具链提供，这里不再声明。
    */
-  "hvigorVersion": "5.0.2",
-  "dependencies": {
-    "@ohos/hvigor-ohos-plugin": "5.0.2"
-  },
+  "modelVersion": "5.0.0",
+  "dependencies": {},
   "execution": {},
   "logging": {},
   "debugging": {},

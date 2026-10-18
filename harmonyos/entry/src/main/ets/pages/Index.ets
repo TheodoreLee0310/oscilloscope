@@ -51,7 +51,13 @@ struct Index {
         'ohos.permission.APPROXIMATELY_LOCATION',
         'ohos.permission.LOCATION'
       ];
-      const context = getContext(this) as common.UIAbilityContext;
+      // getContext() 在 API 12 之后已被标记为废弃，改用 UIContext 取宿主 Context
+      const hostContext = this.getUIContext().getHostContext();
+      if (!hostContext) {
+        hilog.warn(DOMAIN, TAG, '%{public}s', '无法获取宿主 Context，跳过权限申请');
+        return;
+      }
+      const context = hostContext as common.UIAbilityContext;
       const result = await atManager.requestPermissionsFromUser(context, permissions);
       hilog.info(DOMAIN, TAG, '定位权限申请结果: %{public}s', JSON.stringify(result.authResults));
     } catch (err) {

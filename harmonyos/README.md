@@ -28,13 +28,13 @@
 
 | 项 | 要求 | 说明 |
 | --- | --- | --- |
-| DevEco Studio | **5.0 Release 及以上** | 下载：<https://developer.huawei.com/consumer/cn/deveco-studio/> |
-| HarmonyOS SDK | **API 12（5.0.0）** | 在 DevEco 的 SDK Manager 里勾选安装 |
+| DevEco Studio | **6.0.1 及以上**（本工程已在此版本实测编译通过） | 下载：<https://developer.huawei.com/consumer/cn/deveco-studio/> |
+| HarmonyOS SDK | **API 21（随 DevEco 6.0.1 自带，6.0.1.112）** | 本工程 `compatibleSdkVersion` 声明为 `5.0.0(12)`，即最低兼容 API 12；编译使用已安装的 SDK |
 | Node.js | ≥ 18 | 用来构建 Web 产物（仓库根目录） |
 | 设备 | 鸿蒙真机（推荐）或模拟器 | 真机需在「设置 → 关于本机」连点版本号开启开发者模式 |
 
-> 本工程不依赖任何三方 har / ohpm 包，**不需要联网执行 `ohpm install`**，
-> 唯一需要联网的是 DevEco 自己下载 hvigor 构建插件（首次 Sync 时）。
+> 本工程不依赖任何三方 har / ohpm 包，**不需要执行 `ohpm install`**，也不需要联网。
+> hvigor 与插件由 DevEco Studio 自带工具链提供（见 `hvigor/hvigor-config.json5` 的注释）。
 
 ---
 
@@ -130,22 +130,58 @@ npm run build:harmonyos
 
 ---
 
-## 五、已知限制（诚实说明）
+## 五、验证状态与已知限制
 
-1. **本工程尚未经过真机编译验证。** 开发这份工程的环境没有安装 DevEco Studio 与 HarmonyOS SDK，
-   因此 ArkTS 代码是按 ArkWeb 公开 API 写的，**必须经过一次真实编译**才能确认无语法/版本差异。
-   如果 `Sync` 或编译报错，最常见的原因是：
-   - `hvigor/hvigor-config.json5` 里的版本号与本机 DevEco 不一致 → 点 Sync Now 自动修复；
-   - API 版本低于 12：`Index.ets` 里的 `@kit.ArkWeb` 等 kit 式导入需要改成
-     旧式导入（例如 `import webview from '@ohos.web.webview';`）。
-2. **网页侧与网络相关的功能会降级**（不影响主体功能）：
+### 已经验证过的（在本机 DevEco Studio 6.0.1 + SDK API 21 + hvigor 6.21.1 上实测）
+
+- ✅ 工程结构静态校验：`npm run harmonyos:verify`，36 项全过
+- ✅ **ArkTS 编译通过**：`CompileArkTS` 成功，无语法错误、无弃用警告
+- ✅ **HAP 打包成功**：`BUILD SUCCESSFUL`，产物 `entry-default-unsigned.hap` 约 1.25 MB
+- ✅ HAP 内容确认：含 `resources/rawfile/www/{index,internal,login}.html`、`js/`、`css/`、`textures/`、
+  以及编译后的 `ets/modules.abc`
+
+### 尚未验证的
+
+- ⚠️ **未在真机 / 模拟器上运行过**：本环境没有连接鸿蒙设备，界面实际显示效果需你实机确认。
+- ⚠️ **HAP 未签名**：`No signingConfig found for product default` 是正常警告，
+  未签名的包不能装到真机，需在 DevEco Studio 里配置自动签名（见第 2 步）。
+
+### 其它限制
+
+1. **网页侧与网络相关的功能会降级**（不影响主体功能）：
    - 百度地图 JS API 需要按域名白名单授权，rawfile 来源通常不在白名单 →
-     自动退化为「离线沙箱模式」（用模拟坐标与地形演示）；
+     自动退化为「离线示意地图」（可正常演示点击选点 → 地形 → 波形）；
    - Coze AI 助手挂件在离线或域名被拦截时不显示；
-   - VR 寻波的 41 张 Unsplash 地形实景图在无网络时显示为空白。
-3. **Electron 桌面壳无法在鸿蒙上运行**，这是设计如此：`electron-main.js` 与 `packaging/`
+   - VR 寻波的地形实景图在离线时使用内置 SVG 示意图。
+2. **Electron 桌面壳无法在鸿蒙上运行**，这是设计如此：`electron-main.js` 与 `packaging/`
    下的脚本只在开发机 / 桌面端使用。鸿蒙端用的是同一份 Web 产物 + ArkWeb 容器。
-4. 移动端 GPU 较弱，三维页的像素比上限被自动压到 1.5（桌面端为 2），以换取流畅度。
+3. 移动端 GPU 较弱，三维页的像素比上限被自动压到 1.5（桌面端为 2），以换取流畅度。
+4. hvigor 会提示「未显式设置 targetSdkVersion」，属于建议项，不影响编译。
+
+---
+
+## 五之二、不用打开 DevEco 图形界面也能构建（已实测）
+
+仓库提供了命令行构建脚本，会自动定位 DevEco Studio 并配好
+`DEVECO_SDK_HOME` / `JAVA_HOME` / hvigor 用户目录：
+
+```bash
+npm run build:harmonyos      # 构建 Web 产物并同步进 rawfile
+npm run harmonyos:build      # 用 hvigor 编译出 HAP
+npm run harmonyos:verify     # 静态校验工程结构
+```
+
+产物路径：`harmonyos/entry/build/default/outputs/default/entry-default-unsigned.hap`
+
+如果脚本找不到 DevEco Studio（默认会探测 `D:\huawei-devp\DevEco Studio` 等常见路径），
+设置环境变量即可：
+
+```powershell
+$env:DEVECO_HOME = "你的 DevEco Studio 安装目录"
+```
+
+> 注意：命令行构建出来的同样是**未签名** HAP；签名涉及你的开发者证书，
+> 只能在 DevEco Studio 里配置（第 2 步）。
 
 ---
 
