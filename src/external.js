@@ -1170,6 +1170,14 @@ function createVueApp() {
       //       而地图只在用户点击"初始化地图"时才真正需要。
       async _initBaiduMapAsync() {
         if (typeof BMap === 'undefined') {
+          // 设备明确处于离线状态时不用等 6 秒超时，直接上离线示意地图，
+          // 否则演示时会先空白几秒，看起来像卡住了。
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            console.warn('[VR寻波] 设备离线，直接使用离线示意地图');
+            this.initMockMap();
+            return;
+          }
+
           const ok = await loadScriptOnce(BAIDU_MAP_API_URL, {
             timeout: 6000,
             globalCheck: () => typeof BMap !== 'undefined',
