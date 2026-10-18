@@ -97,13 +97,14 @@
           </div>
 
           <div v-if="vrwave.sandboxMode" class="vrwave-sandbox-notice">
-            ⚠️ 沙箱模式：地图API不可用，使用模拟数据演示
+            🗺️ 离线示意地图：地图 API 不可用，已启用内置模拟数据 —— 点击地图任意位置、或点「获取当前位置」，即可演示完整的地形→波形流程
           </div>
 
           <div class="vrwave-controls">
             <div class="vrwave-buttons">
               <button @click="initBaiduMap" class="vrwave-btn vrwave-init-btn" :disabled="vrwave.mapLoaded">
                 <span v-if="!vrwave.mapLoaded">🗺️ 初始化地图</span>
+                <span v-else-if="vrwave.mockMapActive">✅ 离线地图已就绪</span>
                 <span v-else>✅ 地图已加载</span>
               </button>
               <button @click="getCurrentLocation" class="vrwave-btn vrwave-locate-btn" :disabled="!vrwave.mapLoaded">

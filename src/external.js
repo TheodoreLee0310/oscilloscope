@@ -22,6 +22,10 @@ import {
   navigate,
 } from './utils/platform.js';
 
+// ===== 离线兜底资源（不依赖网络的模拟地图与地形示意图） =====
+import { MockMap } from './utils/mockMap.js';
+import { allTerrainImages } from './utils/terrainArt.js';
+
 // ===== 核心模块导入 =====
 import { OscilloscopeConstants } from '../scripts/constants.js';
 import * as WaveformUtilities from '../scripts/WaveformUtilities.js';
@@ -206,6 +210,8 @@ function createVueApp() {
       // VR寻波功能数据
       vrwave: {
         mapLoaded: false,
+        // 是否已切换到"离线模拟地图"（百度地图 API 不可用时的替代方案）
+        mockMapActive: false,
         mapInstance: null,
         locationInfo: null,
         currentTerrain: null,
@@ -627,6 +633,12 @@ function createVueApp() {
         // 使用CalibrationLogic模块化函数设置实验步骤
         Object.assign(this, CalibrationLogic.setExperimentStep(this, step));
         
+        // 切换到 VR 寻波时，若处于离线模拟模式则确保地图已挂载
+        // （面板由 v-if 控制，离开时会被销毁，回来需要重新挂载）
+        if (step === 'vrwave') {
+          this.$nextTick(() => this.ensureMockMap());
+        }
+
         // 如果切换到标准测量模式，输出当前校准参数到控制台
         if (step === 'normal') {
           console.log('当前校准参数 (仅控制台显示)', 
@@ -1159,15 +1171,16 @@ function createVueApp() {
       async _initBaiduMapAsync() {
         if (typeof BMap === 'undefined') {
           const ok = await loadScriptOnce(BAIDU_MAP_API_URL, {
-            timeout: 10000,
+            timeout: 6000,
             globalCheck: () => typeof BMap !== 'undefined',
           });
           if (!ok) {
-            console.warn('百度地图API不可用（离线或域名未授权），进入沙箱模式');
-            toast('地图服务不可用，已切换为离线沙箱模式', 'warn', 3200);
-            this.vrwave.sandboxMode = true;
-            this.vrwave.mapLoaded = true;
-            this.enterSandboxMode();
+            // 地图 API 不可用（离线 / AK 未授权 / 域名被拦截）：
+            // 不再只弹一句"不可用"，而是挂上内置的离线模拟地图，
+            // 让 VR 寻波的整条交互链路依然可以完整演示。
+            console.warn('[VR寻波] 百度地图 API 不可用，切换为离线模拟地图');
+            this.initMockMap();
+            toast('地图 API 不可用，已切换为离线示意地图（模拟数据）', 'warn', 3200);
             return;
           }
         }
@@ -1189,34 +1202,178 @@ function createVueApp() {
           this.vrwave.sandboxMode = false;
           console.log('百度地图初始化完成');
         } catch (error) {
-          console.error('地图初始化失败，进入沙箱模式:', error);
-          this.vrwave.sandboxMode = true;
-          this.vrwave.mapLoaded = true;
-          this.enterSandboxMode();
+          console.error('[VR寻波] 地图初始化失败，切换为离线模拟地图:', error);
+          this.initMockMap();
+        }
+      },
+
+      /* ===== 离线模拟地图（地图 API 不可用时的替代方案） ===== */
+
+      /** 把 vrwave.terrainLocations 摊平成 [{name,address,lng,lat,terrainType}] */
+      collectTerrainLocations() {
+        const list = [];
+        const groups = this.vrwave.terrainLocations || {};
+        Object.keys(groups).forEach((type) => {
+          (groups[type] || []).forEach((loc) => {
+            list.push({
+              name: loc.name,
+              address: loc.address,
+              lng: loc.lng,
+              lat: loc.lat,
+              terrainType: type,
+            });
+          });
+        });
+        return list;
+      },
+
+      /** 在给定坐标附近找最近的已知地形地点（模拟"逆地理编码"） */
+      findNearestTerrainLocation(lng, lat) {
+        const list = this.collectTerrainLocations();
+        let best = null;
+        let bestDist = Infinity;
+        for (const loc of list) {
+          const dLng = loc.lng - lng;
+          const dLat = loc.lat - lat;
+          const dist = dLng * dLng + dLat * dLat;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = loc;
+          }
+        }
+        return best;
+      },
+
+      /**
+       * 初始化离线模拟地图。
+       * @param {object|null} restore 之前的视图状态（面板被重建后恢复用）
+       */
+      initMockMap(restore = null) {
+        const container = this.$refs.baiduMap || document.getElementById('baidu-map-container');
+        if (!container) {
+          console.warn('[VR寻波] 找不到地图容器，无法挂载离线地图');
+          return;
+        }
+
+        // 用本地 SVG 示意图替换 Unsplash 外链：离线时不会出现整片破图
+        this.vrwave.terrainImages = allTerrainImages();
+
+        if (this._mockMap) {
+          try { this._mockMap.destroy(); } catch (e) { /* 忽略 */ }
+          this._mockMap = null;
+        }
+
+        const locations = this.collectTerrainLocations();
+        this._mockMap = new MockMap(container, {
+          center: restore ? restore.center : { lng: 112, lat: 32 },
+          spanLng: restore ? restore.spanLng : 46,
+          locations,
+          onPick: (point) => this.handleMockMapPick(point),
+        });
+
+        this.vrwave.sandboxMode = true;
+        this.vrwave.mockMapActive = true;
+        this.vrwave.mapLoaded = true;
+        this.vrwave.mapInstance = null;
+
+        if (restore && restore.marker) {
+          this._mockMap.setMarker(restore.marker);
+          if (restore.selectedKey) this._mockMap.highlightLocation(restore.selectedKey);
+          return;
+        }
+
+        // 首次进入：默认落在「西湖」，让面板一打开就有地形 / 波形 / 示意图
+        const start = locations.find((l) => l.name === '西湖') || locations[0];
+        if (start) {
+          this._mockMap.setCenter(start.lng, start.lat, {
+            spanLng: 30,
+            marker: true,
+            selectedKey: start.name,
+          });
+          this.applyMockLocation(start, { silent: true });
+        }
+      },
+
+      /**
+       * 面板被 v-if 销毁重建后重新挂载离线地图（保留原来的视野）
+       */
+      ensureMockMap() {
+        if (!this.vrwave.mockMapActive) return;
+        const container = this.$refs.baiduMap || document.getElementById('baidu-map-container');
+        if (!container) return;
+
+        if (this._mockMap && this._mockMap.canvas && container.contains(this._mockMap.canvas)) {
+          this._mockMap.refresh();
+          return;
+        }
+
+        const restore = this._mockMap
+          ? {
+              center: { ...this._mockMap.center },
+              spanLng: this._mockMap.spanLng,
+              marker: this._mockMap.marker ? { ...this._mockMap.marker } : null,
+              selectedKey: this._mockMap.selectedKey,
+            }
+          : null;
+
+        this.initMockMap(restore);
+      },
+
+      /** 在离线地图上点击选点 */
+      handleMockMapPick(point) {
+        const loc = point.location || this.findNearestTerrainLocation(point.lng, point.lat);
+        if (loc) {
+          if (this._mockMap) this._mockMap.highlightLocation(loc.name);
+          this.applyMockLocation(loc);
+        } else {
+          this.vrwave.locationInfo = {
+            lng: point.lng,
+            lat: point.lat,
+            address: '离线示意地图选点',
+          };
+          this.inferTerrainFromLocation({ address: '' });
+          this.searchNearbyTerrain(point.lng, point.lat);
+        }
+      },
+
+      /** 采用一个模拟地点：写入位置信息 → 推断地形 → 搜索附近地形 */
+      applyMockLocation(loc, options = {}) {
+        this.vrwave.locationInfo = {
+          lng: loc.lng,
+          lat: loc.lat,
+          address: loc.address || loc.name,
+        };
+        this.inferTerrainFromLocation({ name: loc.name, address: loc.address || '' });
+        this.searchNearbyTerrain(loc.lng, loc.lat);
+        if (!options.silent) {
+          toast('已选择：' + loc.name, 'info', 1600);
         }
       },
 
       enterSandboxMode() {
-        this.vrwave.locationInfo = {
-          lng: 116.404,
-          lat: 39.915,
-          address: '北京市天安门广场（沙箱模拟位置）'
-        };
-        this.searchNearbyTerrain(116.404, 39.915);
+        // 兼容旧调用点：沙箱模式统一走离线模拟地图
+        this.initMockMap();
       },
 
       getCurrentLocation() {
         if (this.vrwave.sandboxMode) {
-          const sandboxLocations = [
-            { lng: 120.150, lat: 30.250, address: '浙江省杭州市西湖区（沙箱模拟）' },
-            { lng: 116.397, lat: 39.908, address: '北京市海淀区颐和园（沙箱模拟）' },
-            { lng: 121.474, lat: 31.230, address: '上海市黄浦江畔（沙箱模拟）' },
-            { lng: 114.305, lat: 30.593, address: '湖北省武汉市东湖（沙箱模拟）' },
-            { lng: 102.682, lat: 25.038, address: '云南省昆明市滇池（沙箱模拟）' }
-          ];
-          const loc = sandboxLocations[Math.floor(Math.random() * sandboxLocations.length)];
-          this.vrwave.locationInfo = loc;
-          this.searchNearbyTerrain(loc.lng, loc.lat);
+          // 离线模式：模拟一次 GPS 定位 —— 从已知地形地点里随机挑一个，
+          // 同步移动地图中心与标记，让"获取当前位置"看起来真的发生了。
+          const candidates = this._mockMap
+            ? this._mockMap.locations
+            : this.collectTerrainLocations();
+          if (!candidates || candidates.length === 0) return;
+
+          const loc = candidates[Math.floor(Math.random() * candidates.length)];
+          if (this._mockMap) {
+            this._mockMap.setCenter(loc.lng, loc.lat, {
+              spanLng: 26,
+              marker: true,
+              selectedKey: loc.name,
+            });
+          }
+          this.applyMockLocation(loc);
+          toast('模拟定位：' + loc.name, 'info', 2000);
           return;
         }
         if (!this.vrwave.mapInstance) return;
@@ -1477,6 +1634,10 @@ function createVueApp() {
 
         this.vrwave.matchedLocationImageUrl = this.vrwave.terrainImages[poi.terrainType] || null;
 
+        // 离线 / 沙箱模式：本地示意图已经够用，不再向外网取图
+        // （原来这里会请求已停止服务的 source.unsplash.com，必然失败并刷控制台报错）
+        if (this.vrwave.sandboxMode) return;
+
         const terrainKeywords = {
           mountain: 'mountain,peak',
           water: 'lake,river,water',
@@ -1577,7 +1738,8 @@ function createVueApp() {
         }
         this.vrwave.matchedLocation = { ...matched };
 
-        if (matched.image) {
+        // 离线模式一律用本地示意图，不再引用 Unsplash 外链（离线必定破图）
+        if (matched.image && !this.vrwave.sandboxMode) {
           this.vrwave.matchedLocationImageUrl = matched.image;
         } else {
           this.vrwave.matchedLocationImageUrl = this.vrwave.terrainImages[terrainId] || null;

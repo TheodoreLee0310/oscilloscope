@@ -20,10 +20,12 @@ const url = require('url');
 
 const ROOT = path.resolve(__dirname, '..');
 const SOURCE = path.join(ROOT, 'src', 'utils', 'platform.js');
+const SOURCE_ART = path.join(ROOT, 'src', 'utils', 'terrainArt.js');
 
-// platform.js 是 ESM 且没有任何 import，复制成 .mjs 即可被 Node 直接加载
+// 两个模块都是 ESM 且没有任何 import，复制成 .mjs 即可被 Node 直接加载
 const TMP_DIR = path.join(os.tmpdir(), 'sbq-platform-test');
 const TMP_MODULE = path.join(TMP_DIR, 'platform.mjs');
+const TMP_ART = path.join(TMP_DIR, 'terrainArt.mjs');
 
 let passed = 0;
 let failed = 0;
@@ -73,9 +75,17 @@ async function loadPlatform() {
   return import(url.pathToFileURL(TMP_MODULE).href + '?case=' + loadCounter);
 }
 
+/** 加载离线地形示意图模块 */
+let artCounter = 0;
+async function loadArt() {
+  artCounter++;
+  return import(url.pathToFileURL(TMP_ART).href + '?case=' + artCounter);
+}
+
 async function main() {
   fs.mkdirSync(TMP_DIR, { recursive: true });
   fs.copyFileSync(SOURCE, TMP_MODULE);
+  fs.copyFileSync(SOURCE_ART, TMP_ART);
 
   console.log('\n平台适配层单元测试');
   console.log('────────────────────────────────────────');
@@ -270,6 +280,29 @@ async function main() {
     const ok = navigate('./login.html');
     assert.strictEqual(ok, true);
     assert.strictEqual(assigned, './login.html');
+  });
+
+  // ---------- 8. 离线地形示意图 ----------
+  await testCase('六种地形都能生成合法的内联 SVG 图（零网络依赖）', async () => {
+    const { terrainImage } = await loadArt();
+    const ids = ['mountain', 'water', 'plain', 'forest', 'valley', 'ocean'];
+    for (const id of ids) {
+      const uri = terrainImage(id);
+      assert.ok(uri.startsWith('data:image/svg+xml'), id + ' 应为 data URI');
+      assert.ok(decodeURIComponent(uri).indexOf('<svg') >= 0, id + ' 应包含 svg 元素');
+    }
+  });
+
+  await testCase('未知地形回退到平原示意图', async () => {
+    const { terrainImage } = await loadArt();
+    assert.strictEqual(terrainImage('unknown-terrain'), terrainImage('plain'));
+  });
+
+  await testCase('allTerrainImages 返回全部 6 种地形', async () => {
+    const { allTerrainImages } = await loadArt();
+    const map = allTerrainImages();
+    assert.strictEqual(Object.keys(map).length, 6);
+    assert.ok(map.mountain && map.ocean);
   });
 
   console.log('────────────────────────────────────────');
