@@ -48,7 +48,10 @@ module.exports = {
     liveReload: true,
     watchFiles: ['src/**/*', 'public/**/*'],  // 监听文件变化
     open: ['index.html'],
-    port: 8081,
+    // 端口可通过环境变量覆盖，避免 8081 被占用时只能改代码：
+    //   PowerShell: $env:SBQ_DEV_PORT=8082; npm run dev
+    //   或直接:     npm run dev -- --port 8082
+    port: Number(process.env.SBQ_DEV_PORT) || 8081,
     compress: true,
     historyApiFallback: true,
   },
