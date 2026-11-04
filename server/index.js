@@ -8,6 +8,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { validateState } = require('../shared/experiment-state');
 const scrypt = promisify(crypto.scrypt);
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
+const SBQ_EXPORT_FORMAT = 'sbq-experiments';
 const failure = (status, message) => Object.assign(new Error(message), { status });
 const publicUser = u => ({ id: u.id, username: u.username, nickname: u.nickname, createdAt: u.created_at });
 
@@ -40,25 +41,28 @@ function createServer(options = {}) {
   function session(user) {
     const token = crypto.randomBytes(32).toString('hex');
     db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
-    db.prepare('INSERT INTO sessions VALUES (?, ?, ?)').run(hash(token), user.id, Date.now() + sessionMs);
-    return { token, user: publicUser(user) };
+    const expiresAt = Date.now() + sessionMs;
+    db.prepare('INSERT INTO sessions VALUES (?, ?, ?)').run(hash(token), user.id, expiresAt);
+    // 下发过期时间，客户端据此区分「令牌仍可上传」与「仅能本地使用」
+    return { token, user: publicUser(user), expiresAt: new Date(expiresAt).toISOString() };
   }
   function authenticate(req) {
     const match = /^Bearer ([a-f0-9]{64})$/.exec(req.headers.authorization || '');
     if (!match) throw failure(401, '请先登录，游客不能保存实验');
     const tokenHash = hash(match[1]);
-    const user = db.prepare(`SELECT users.* FROM users JOIN sessions ON users.id=sessions.user_id
+    const user = db.prepare(`SELECT users.*, sessions.expires_at AS session_expires_at FROM users
+      JOIN sessions ON users.id=sessions.user_id
       WHERE sessions.token_hash=? AND sessions.expires_at>?`).get(tokenHash, Date.now());
     if (!user) throw failure(401, '登录已过期，请重新登录');
-    return { user, tokenHash };
+    return { user, tokenHash, expiresAt: user.session_expires_at };
   }
-  async function body(req) {
+  async function body(req, maxBytes = 32768) {
     if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) throw failure(415, '请使用 JSON 请求');
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
       size += chunk.length;
-      if (size > 32768) throw failure(413, '请求数据过大');
+      if (size > maxBytes) throw failure(413, '请求数据过大');
       chunks.push(chunk);
     }
     try {
@@ -109,15 +113,34 @@ function createServer(options = {}) {
           if (!user || !crypto.timingSafeEqual(candidate, Buffer.from(user.password_hash, 'hex'))) throw failure(401, '用户名或密码错误');
           return json(res, 200, session(user));
         }
-        const { user, tokenHash } = authenticate(req);
-        if (req.method === 'GET' && route === '/api/auth/me') return json(res, 200, { user: publicUser(user) });
+        const { user, tokenHash, expiresAt } = authenticate(req);
+        if (req.method === 'GET' && route === '/api/auth/me') {
+          return json(res, 200, { user: publicUser(user), expiresAt: new Date(expiresAt).toISOString() });
+        }
         if (req.method === 'POST' && route === '/api/auth/logout') {
           db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash);
           return json(res, 200, { ok: true });
         }
         if (req.method === 'GET' && route === '/api/experiments') {
-          const items = db.prepare("SELECT id,title,notes,created_at AS createdAt,json_extract(state,'$.version') AS stateVersion FROM experiments WHERE user_id=? ORDER BY created_at DESC, rowid DESC").all(user.id);
-          return json(res, 200, { items });
+          // 关键字搜索 + 分页（limit/offset）。不带参数时行为与旧版一致，
+          // 只是多返回 total，原生客户端只读 items，因此向后兼容。
+          const keyword = (url.searchParams.get('q') || '').trim().slice(0, 80);
+          // 注意：不能用 `parseInt(x) || 100`，否则 limit=0 会被当成 falsy 变成 100
+          const rawLimit = Number.parseInt(url.searchParams.get('limit') || '100', 10);
+          const rawOffset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
+          const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 100, 1), 200);
+          const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+          let where = 'user_id=?';
+          const params = [user.id];
+          if (keyword.length > 0) {
+            const escaped = keyword.replace(/[\\%_]/g, m => '\\' + m);
+            where += " AND (title LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')";
+            params.push('%' + escaped + '%', '%' + escaped + '%');
+          }
+          const total = db.prepare(`SELECT count(*) AS n FROM experiments WHERE ${where}`).get(...params).n;
+          const items = db.prepare(`SELECT id,title,notes,created_at AS createdAt,json_extract(state,'$.version') AS stateVersion
+            FROM experiments WHERE ${where} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+          return json(res, 200, { items, total, limit, offset });
         }
         if (req.method === 'POST' && route === '/api/experiments') {
           const data = await body(req);
@@ -131,7 +154,70 @@ function createServer(options = {}) {
           db.prepare('INSERT INTO experiments VALUES(?,?,?,?,?,?)').run(item.id, user.id, item.title, item.notes, JSON.stringify(state), item.createdAt);
           return json(res, 201, { item });
         }
+        // 导出：整份记录打包成一个 JSON，便于备份或跨设备迁移
+        if (req.method === 'GET' && route === '/api/experiments/export') {
+          const rows = db.prepare(`SELECT title,notes,state,created_at AS createdAt FROM experiments
+            WHERE user_id=? ORDER BY created_at ASC, rowid ASC`).all(user.id);
+          const items = rows.map(row => ({
+            title: row.title, notes: row.notes, state: JSON.parse(row.state), createdAt: row.createdAt
+          }));
+          return json(res, 200, { format: SBQ_EXPORT_FORMAT, version: 1, exportedAt: new Date().toISOString(), items });
+        }
+        // 导入：逐条校验，非法记录跳过并回报原因，合法记录在同一事务内写入
+        if (req.method === 'POST' && route === '/api/experiments/import') {
+          const data = await body(req, 2 * 1024 * 1024);
+          if (data.format !== undefined && data.format !== SBQ_EXPORT_FORMAT) throw failure(400, '导入文件格式不正确');
+          if (!Array.isArray(data.items)) throw failure(400, '导入文件缺少 items 数组');
+          if (data.items.length > 500) throw failure(400, '一次最多导入 500 条实验');
+          const existing = db.prepare('SELECT count(*) AS n FROM experiments WHERE user_id=?').get(user.id).n;
+          if (existing + data.items.length > 500) throw failure(409, '导入后记录将超过 500 条，请先删除旧记录');
+          const errors = [];
+          const rows = [];
+          data.items.forEach((item, index) => {
+            try {
+              if (item === null || typeof item !== 'object' || Array.isArray(item)) throw new Error('记录格式不正确');
+              const title = typeof item.title === 'string' ? item.title.trim() : '';
+              if (title.length === 0 || title.length > 80) throw new Error('标题需为 1–80 位');
+              const notes = item.notes === undefined || item.notes === null ? '' : item.notes;
+              if (typeof notes !== 'string' || notes.length > 2000) throw new Error('备注不能超过 2000 位');
+              const state = validateState(item.state);
+              const createdAt = typeof item.createdAt === 'string' && item.createdAt.length <= 40
+                ? item.createdAt : new Date().toISOString();
+              rows.push({ title, notes, state, createdAt });
+            } catch (error) { errors.push('第 ' + (index + 1) + ' 条：' + error.message); }
+          });
+          const insert = db.prepare('INSERT INTO experiments VALUES(?,?,?,?,?,?)');
+          db.exec('BEGIN');
+          try {
+            for (const row of rows) {
+              insert.run(crypto.randomUUID(), user.id, row.title, row.notes, JSON.stringify(row.state), row.createdAt);
+            }
+            db.exec('COMMIT');
+          } catch (error) { db.exec('ROLLBACK'); throw error; }
+          return json(res, 201, { imported: rows.length, skipped: errors.length, errors: errors.slice(0, 10) });
+        }
         const match = /^\/api\/experiments\/([a-f0-9-]{36})$/.exec(route);
+        // 重命名 / 修改备注
+        if (match && req.method === 'PUT') {
+          const data = await body(req);
+          const fields = [];
+          const values = [];
+          if (data.title !== undefined) {
+            if (typeof data.title !== 'string' || !data.title.trim() || data.title.length > 80) throw failure(400, '标题需为 1–80 位');
+            fields.push('title=?'); values.push(data.title.trim());
+          }
+          if (data.notes !== undefined) {
+            if (typeof data.notes !== 'string' || data.notes.length > 2000) throw failure(400, '备注不能超过 2000 位');
+            fields.push('notes=?'); values.push(data.notes);
+          }
+          if (fields.length === 0) throw failure(400, '请提供要修改的标题或备注');
+          const result = db.prepare(`UPDATE experiments SET ${fields.join(', ')} WHERE id=? AND user_id=?`)
+            .run(...values, match[1], user.id);
+          if (result.changes === 0) throw failure(404, '实验记录不存在');
+          const item = db.prepare(`SELECT id,title,notes,created_at AS createdAt,json_extract(state,'$.version') AS stateVersion
+            FROM experiments WHERE id=?`).get(match[1]);
+          return json(res, 200, { item });
+        }
         if (match && ['GET', 'DELETE'].includes(req.method)) {
           const item = db.prepare('SELECT id,title,notes,state,created_at AS createdAt FROM experiments WHERE id=? AND user_id=?').get(match[1], user.id);
           if (!item) throw failure(404, '实验记录不存在');

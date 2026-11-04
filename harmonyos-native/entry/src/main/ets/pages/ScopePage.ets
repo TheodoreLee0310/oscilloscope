@@ -1,6 +1,10 @@
 import { AuthService } from '../service/AuthService';
 import { ApiError } from '../service/ApiService';
 import { ExperimentService, ExperimentSummary } from '../service/ExperimentService';
+import { DraftRecord, DraftService } from '../service/DraftService';
+import { LocalStore } from '../service/LocalStore';
+import { SessionService } from '../service/SessionService';
+import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { Palette, Layout, Limits } from '../common/ScopeConstants';
 import { ScopeSetup, WaveOptions, WaveOption } from '../model/ScopeTypes';
@@ -21,6 +25,10 @@ struct ScopePage {
   private timerId: number = -1;
   private startTs: number = 0;
   private frozenSec: number = 0;
+  /** 本机草稿服务与自动保存节流状态 */
+  private draftService: DraftService | null = null;
+  private draftTick: number = 0;
+  private lastDraftSignature: string = '';
 
   @State recordsOpen: boolean = false;
   @State recordBusy: boolean = false;
@@ -30,6 +38,11 @@ struct ScopePage {
   @State records: ExperimentSummary[] = [];
   @State pendingDelete: string = '';
   @State loggedIn: boolean = false;
+  /** 本机草稿：发现待恢复的现场 / 自动保存结果 / 令牌是否已过期 */
+  @State draftFound: boolean = false;
+  @State draftSavedAtText: string = '';
+  @State draftMessage: string = '';
+  @State tokenExpired: boolean = false;
   @State userName: string = '访客';
   @State running: boolean = true;
   @State displayMode: string = 'dual';
@@ -62,6 +75,9 @@ struct ScopePage {
       this.userName = stored;
     }
     this.loggedIn = (AppStorage.get<string>('token') || '').length > 0;
+    const expiresAtMs: number = AppStorage.get<number>('expiresAtMs') || 0;
+    this.tokenExpired = expiresAtMs > 0 && expiresAtMs <= Date.now();
+    this.initDrafts();
     this.startTs = Date.now();
     this.timerId = setInterval(() => {
       this.frame();
@@ -69,14 +85,108 @@ struct ScopePage {
   }
 
   aboutToDisappear(): void {
+    // 退出前再存一次，覆盖 buildSetup 里归一化过的 runTimeSec
+    this.autoSaveDraft();
     if (this.timerId !== -1) {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
   }
 
+  /* ------------------------------------------------------------ 本机草稿 */
+
+  /** 草稿目录来自应用沙箱 filesDir；与服务器数据完全分离 */
+  private initDrafts(): void {
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) {
+        return;
+      }
+      this.draftService = new DraftService((context as common.UIAbilityContext).filesDir);
+      const draft: DraftRecord | null = this.draftService.load(this.draftProfile());
+      if (draft !== null) {
+        this.draftFound = true;
+        this.draftSavedAtText = new Date(draft.savedAtMs).toLocaleString();
+      }
+    } catch (_) {
+      this.draftService = null;
+    }
+  }
+
+  /** 账号隔离：服务器地址 + userId；游客单独一份 */
+  private draftProfile(): string {
+    return LocalStore.profileKey(
+      AppStorage.get<string>('server') || '',
+      AppStorage.get<number>('userId') || 0
+    );
+  }
+
+  /** 只把会影响画面的参数纳入签名，刻意排除每帧都在变的运行时长 */
+  private draftSignature(): string {
+    return [this.displayMode, this.timeDivMs, this.trigEnabled, this.trigLevel, this.trigRising,
+      this.ch1Enabled, this.ch1Type, this.ch1Freq, this.ch1Amp, this.ch1VoltsDiv, this.ch1Pos,
+      this.ch2Enabled, this.ch2Type, this.ch2Freq, this.ch2Amp, this.ch2VoltsDiv, this.ch2Pos,
+      this.phaseDeg].join('|');
+  }
+
+  private autoSaveDraft(): void {
+    if (this.draftService === null || this.draftService === undefined) {
+      return;
+    }
+    const signature: string = this.draftSignature();
+    if (signature === this.lastDraftSignature) {
+      return;
+    }
+    const ok: boolean = this.draftService.save(this.draftProfile(), this.buildSetup());
+    if (ok) {
+      this.lastDraftSignature = signature;
+      this.draftMessage = '已在本机自动保存草稿 ' + new Date().toLocaleTimeString();
+    }
+  }
+
+  private applyDraft(): void {
+    if (this.draftService === null || this.draftService === undefined) {
+      return;
+    }
+    const draft: DraftRecord | null = this.draftService.load(this.draftProfile());
+    this.draftFound = false;
+    if (draft === null) {
+      this.draftMessage = '草稿已损坏，未恢复（坏文件已隔离）';
+      return;
+    }
+    const setup = draft.setup;
+    this.displayMode = setup.displayMode; this.timeDivMs = setup.timeDiv * 1000;
+    this.trigEnabled = setup.triggerEnabled; this.trigLevel = setup.triggerLevel;
+    this.trigRising = setup.triggerRising;
+    this.ch1Enabled = setup.ch1.enabled; this.ch1Type = setup.ch1.waveType;
+    this.ch1Freq = setup.ch1.frequency; this.ch1Amp = setup.ch1.amplitude;
+    this.ch1VoltsDiv = setup.ch1.voltsDiv; this.ch1Pos = setup.ch1.offsetDiv;
+    this.ch2Enabled = setup.ch2.enabled; this.ch2Type = setup.ch2.waveType;
+    this.ch2Freq = setup.ch2.frequency; this.ch2Amp = setup.ch2.amplitude;
+    this.ch2VoltsDiv = setup.ch2.voltsDiv; this.ch2Pos = setup.ch2.offsetDiv;
+    this.phaseDeg = setup.ch2.phaseDeg;
+    this.lastDraftSignature = this.draftSignature();
+    this.resetRun(); this.frame();
+    this.draftMessage = '已恢复本机草稿（' + this.draftSavedAtText + '）';
+  }
+
+  private discardDraft(): void {
+    if (this.draftService !== null && this.draftService !== undefined) {
+      this.draftService.clear(this.draftProfile());
+    }
+    this.draftFound = false;
+    this.lastDraftSignature = '';
+    this.draftMessage = '已删除本机草稿';
+  }
+
   private frame(): void {
     this.renderer.draw(this.buildSetup());
+    // 约每 5 秒（33ms × 150）检查一次参数变化并落盘
+    this.draftTick++;
+    if (this.draftTick >= 150) {
+      this.draftTick = 0;
+      this.autoSaveDraft();
+    }
   }
 
   private buildSetup(): ScopeSetup {
@@ -133,7 +243,12 @@ struct ScopePage {
         this.recordsOpen = true; this.recordBusy = false; return;
       }
     }
+    // 先按当前账号存一次草稿，再清空身份，避免草稿落到游客分区
+    this.autoSaveDraft();
+    try { await SessionService.clear(); } catch (_) {}
     AppStorage.setOrCreate('token', '');
+    AppStorage.setOrCreate('userId', 0);
+    AppStorage.setOrCreate('expiresAtMs', 0);
     AppStorage.setOrCreate('displayName', '访客');
     this.records = [];
     this.recordBusy = false;
@@ -194,6 +309,28 @@ struct ScopePage {
     finally { this.recordBusy = false; }
   }
 
+  /** 草稿恢复提示条：仅在确实存在待恢复草稿时占位 */
+  @Builder
+  draftBar() {
+    if (this.draftFound) {
+      Row({ space: 8 }) {
+        Column({ space: 2 }) {
+          Text('发现上次未保存的调参现场').fontColor('#e8f4ec').fontSize(12)
+          Text(this.draftSavedAtText).fontColor(Palette.PANEL_TEXT).fontSize(10)
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Button('恢复').height(32).fontSize(12)
+          .onClick(() => { this.applyDraft(); })
+        Button('删除').height(32).fontSize(12)
+          .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+          .border({ width: 1, color: '#25323d' })
+          .onClick(() => { this.discardDraft(); })
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+      .backgroundColor('#12222c')
+    }
+  }
+
   @Builder
   recordsPanel() {
     Column({ space: 8 }) {
@@ -215,6 +352,13 @@ struct ScopePage {
             Button('刷新记录').enabled(!this.recordBusy).onClick(() => { this.loadRecords(); })
           }
           Text(this.recordBusy ? '正在处理…' : this.recordMessage).fontColor('#d5e6dc').fontSize(12)
+          if (this.tokenExpired) {
+            Text('登录已过期：本机草稿仍可离线使用，保存到云端前需重新登录。')
+              .fontColor('#ffb74d').fontSize(11).width('100%')
+          }
+          if (this.draftMessage.length > 0) {
+            Text(this.draftMessage).fontColor(Palette.PANEL_TEXT).fontSize(11).width('100%')
+          }
           ForEach(this.records, (item: ExperimentSummary) => {
             Column({ space: 6 }) {
               Text(item.title + (item.stateVersion === 2 ? ' · 原生' : ' · 网页'))
@@ -605,6 +749,7 @@ struct ScopePage {
   build() {
     Column() {
       this.topBar()
+      this.draftBar()
 
       Canvas(this.canvasCtx)
         .width('100%')

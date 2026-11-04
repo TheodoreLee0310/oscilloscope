@@ -1,6 +1,7 @@
 import { preferences } from '@kit.ArkData';
 import { router } from '@kit.ArkUI';
 import { AuthService, LoginResult } from '../service/AuthService';
+import { SessionInfo, SessionService } from '../service/SessionService';
 import { Palette } from '../common/ScopeConstants';
 
 /**
@@ -19,6 +20,10 @@ struct Index {
   @State registering: boolean = false;
   @State nickname: string = '';
   @State confirmPassword: string = '';
+  /** 本机已恢复的会话（非空时显示「继续使用」入口） */
+  @State restoredName: string = '';
+  @State restoredUsable: boolean = false;
+  @State restoredExpiryText: string = '';
 
   async aboutToAppear(): Promise<void> {
     try {
@@ -28,6 +33,44 @@ struct Index {
         this.server = await prefs.get('server', AuthService.DEFAULT_SERVER) as string;
       }
     } catch (_) {}
+    // 恢复上次会话：令牌过期也能进入（本机可用），只有上传才要求重新登录
+    try {
+      const info: SessionInfo | null = await SessionService.restore();
+      if (info !== null) {
+        this.server = info.server;
+        this.restoredName = info.displayName.length > 0 ? info.displayName : ('用户 ' + info.userId.toString());
+        this.restoredUsable = SessionService.isTokenUsable(info);
+        if (info.expiresAtMs > 0) {
+          this.restoredExpiryText = this.restoredUsable
+            ? ('可上传 · 会话于 ' + new Date(info.expiresAtMs).toLocaleString() + ' 过期')
+            : '登录已过期 · 仍可离线使用本机草稿，上传前需重新登录';
+        } else {
+          this.restoredExpiryText = '本机可用（服务器未下发过期时间）';
+        }
+        AppStorage.setOrCreate('token', info.token);
+        AppStorage.setOrCreate('server', info.server);
+        AppStorage.setOrCreate('displayName', info.displayName);
+        AppStorage.setOrCreate('userId', info.userId);
+        AppStorage.setOrCreate('expiresAtMs', info.expiresAtMs);
+      }
+    } catch (_) {}
+  }
+
+  /** 继续使用已恢复的会话（不重新登录也能进入主界面） */
+  private continueSession(): void {
+    router.pushUrl({ url: 'pages/ScopePage' });
+  }
+
+  /** 清除本机保存的登录信息（不影响服务器端会话记录） */
+  private async forgetSession(): Promise<void> {
+    await SessionService.clear();
+    this.restoredName = '';
+    this.restoredUsable = false;
+    this.restoredExpiryText = '';
+    AppStorage.setOrCreate('token', '');
+    AppStorage.setOrCreate('userId', 0);
+    AppStorage.setOrCreate('expiresAtMs', 0);
+    this.errorText = '已清除本机登录信息';
   }
 
   private async rememberServer(): Promise<void> {
@@ -63,10 +106,23 @@ struct Index {
     if (res.ok) {
       try { await this.rememberServer(); } catch (_) {}
       this.password = '';
+      const normalizedServer: string = AuthService.normalizeServer(this.server);
       AppStorage.setOrCreate('displayName', res.displayName);
       AppStorage.setOrCreate('role', res.role);
       AppStorage.setOrCreate('token', res.token);
-      AppStorage.setOrCreate('server', AuthService.normalizeServer(this.server));
+      AppStorage.setOrCreate('server', normalizedServer);
+      AppStorage.setOrCreate('userId', res.userId);
+      AppStorage.setOrCreate('expiresAtMs', res.expiresAtMs);
+      // 令牌写入系统密钥库；失败不阻止本次登录，只是下次需要重新登录
+      try {
+        const info: SessionInfo = new SessionInfo();
+        info.server = normalizedServer;
+        info.userId = res.userId;
+        info.displayName = res.displayName;
+        info.token = res.token;
+        info.expiresAtMs = res.expiresAtMs;
+        await SessionService.save(info);
+      } catch (_) {}
       router.pushUrl({ url: 'pages/ScopePage' });
     } else {
       this.errorText = res.message;
@@ -77,6 +133,8 @@ struct Index {
     AppStorage.setOrCreate('displayName', '访客');
     AppStorage.setOrCreate('role', 'guest');
     AppStorage.setOrCreate('token', '');
+    AppStorage.setOrCreate('userId', 0);
+    AppStorage.setOrCreate('expiresAtMs', 0);
     AppStorage.setOrCreate('server', AuthService.DEFAULT_SERVER);
     router.pushUrl({ url: 'pages/ScopePage' });
   }
@@ -108,6 +166,31 @@ struct Index {
       .padding({ top: 24, bottom: 20 })
 
       Column() {
+        if (this.restoredName.length > 0) {
+          Column({ space: 6 }) {
+            Text('上次登录：' + this.restoredName)
+              .fontSize(13).fontColor('#e8f4ec').width('100%')
+            Text(this.restoredExpiryText)
+              .fontSize(11).fontColor(Palette.TEXT_DIM).width('100%')
+            Row({ space: 8 }) {
+              Button('继续使用')
+                .layoutWeight(1).height(38)
+                .backgroundColor(Palette.ACCENT).fontColor('#ffffff')
+                .onClick(() => { this.continueSession(); })
+              Button('清除登录信息')
+                .layoutWeight(1).height(38)
+                .backgroundColor(Color.Transparent).fontColor(Palette.TEXT_DIM)
+                .border({ width: 1, color: '#25323d' })
+                .onClick(() => { this.forgetSession(); })
+            }
+            .width('100%').margin({ top: 4 })
+          }
+          .width('100%')
+          .padding(12)
+          .margin({ bottom: 16 })
+          .backgroundColor('#12222c')
+          .borderRadius(10)
+        }
         this.fieldLabel('用户名')
         TextInput({ text: this.username, placeholder: '3–20 位中文、字母、数字、_ 或 -' })
           .width('100%')

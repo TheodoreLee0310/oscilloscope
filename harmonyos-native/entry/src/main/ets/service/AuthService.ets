@@ -10,13 +10,16 @@ class Credentials {
   }
 }
 interface ApiUser { id: number; username: string; nickname: string; }
-interface LoginBody { token: string; user: ApiUser; }
+interface LoginBody { token: string; user: ApiUser; expiresAt?: string; }
 export class LoginResult {
   ok: boolean = false;
   message: string = '';
   token: string = '';
   displayName: string = '';
   role: string = 'student';
+  /** 会话过期时间（毫秒时间戳）；0 表示服务器未下发 */
+  expiresAtMs: number = 0;
+  userId: number = 0;
 }
 export class AuthService {
   static readonly DEFAULT_SERVER: string = ApiService.DEFAULT_SERVER;
@@ -32,6 +35,12 @@ export class AuthService {
       }
       result.ok = true; result.token = body.token;
       result.displayName = body.user.nickname || body.user.username;
+      result.userId = typeof body.user.id === 'number' ? body.user.id : 0;
+      // 过期时间用于区分「可上传」与「仅本机可用」；缺失按 0 处理，不阻断本机功能
+      if (typeof body.expiresAt === 'string') {
+        const parsed: number = Date.parse(body.expiresAt);
+        result.expiresAtMs = Number.isFinite(parsed) ? parsed : 0;
+      }
       result.message = '登录成功';
     } catch (error) { result.message = (error as Error).message; }
     return result;

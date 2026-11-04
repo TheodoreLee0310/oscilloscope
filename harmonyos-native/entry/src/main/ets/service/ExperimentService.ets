@@ -30,6 +30,11 @@ export class ExperimentService {
   private static async request(route: string, method: http.RequestMethod, payload: string = ''): Promise<string> {
     const token: string = AppStorage.get<string>('token') || '';
     if (token.length === 0) throw new Error('请先登录账号，游客不能保存实验');
+    // 令牌过期只影响「上云」：本机草稿与调参继续可用，因此这里给出可区分的提示
+    const expiresAtMs: number = AppStorage.get<number>('expiresAtMs') || 0;
+    if (expiresAtMs > 0 && expiresAtMs <= Date.now()) {
+      throw new Error('登录已过期：本机功能仍可用，请重新登录后再上传或同步');
+    }
     return ApiService.request(AppStorage.get<string>('server') || ApiService.DEFAULT_SERVER, route, method, payload, token);
   }
   static async list(): Promise<ExperimentSummary[]> {
