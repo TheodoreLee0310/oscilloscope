@@ -86,6 +86,7 @@ async function main() {
     height: 800,
     show: false,
     webPreferences: {
+      partition: 'sbq-smoke-' + process.pid + '-' + Date.now(),
       preload: preloadPath,
       contextIsolation: false,
       nodeIntegration: false,
@@ -164,6 +165,36 @@ async function main() {
     platformCheck.localStorageToken === 'smoke-token',
     'localStorage.sbq_token = ' + platformCheck.localStorageToken
   );
+
+  // 隔离网络，验证地图的离线交互与 v-if 面板重建。
+  const vrInfo = await evaluate(win, `(async () => {
+    const vm = document.getElementById('app').__vue__;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    vm.setExpStep('vrwave');
+    await vm.$nextTick();
+    await vm.initBaiduMap();
+    const ready = vm.vrwave.mockMapActive && !!document.querySelector('#baidu-map-container canvas');
+    const loc = vm.collectTerrainLocations()[0];
+    vm.applyMockLocation(loc);
+    vm.closeTerrainImage();
+    await vm.$nextTick();
+    const closed = !vm.vrwave.showTerrainImage;
+    vm.openTerrainImage();
+    await vm.$nextTick();
+    const reopened = vm.vrwave.showTerrainImage;
+    vm.setExpStep('normal');
+    await vm.$nextTick();
+    vm.setExpStep('vrwave');
+    await vm.$nextTick();
+    await vm.$nextTick();
+    const restored = !!document.querySelector('#baidu-map-container canvas');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return { ready, closed, reopened, restored, errors: window.__smokeErrors || [] };
+  })()`);
+  check('离线地图可初始化', vrInfo.ready);
+  check('地形图片可关闭并重新打开', vrInfo.closed && vrInfo.reopened);
+  check('切换实验模式后地图能恢复', vrInfo.restored);
+  check('VR 交互无未捕获异常', vrInfo.errors.length === 0, vrInfo.errors.join(' | '));
 
   // ---------- 2. 三维内部原理（internal.html）----------
   console.log('\n[2/3] 加载 docs/internal.html（Three.js 三维原理）…');
