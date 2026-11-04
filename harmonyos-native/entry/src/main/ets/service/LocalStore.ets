@@ -21,6 +21,20 @@ export class StoreEnvelope {
   payload: string = '';
 }
 
+/**
+ * 32 位 FNV-1a。
+ * 用途只是**分区命名**（避免字符替换带来的歧义与碰撞），不是安全哈希，
+ * 也不参与任何凭据校验。
+ */
+function fnv1a(input: string, seed: number): string {
+  let hash: number = seed >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return ('00000000' + hash.toString(16)).slice(-8);
+}
+
 export class LocalStore {
   private baseDir: string;
 
@@ -28,12 +42,29 @@ export class LocalStore {
     this.baseDir = filesDir + '/sbq-store';
   }
 
+  /** 规范化服务器地址：去空白、转小写、去掉结尾斜杠，保证同一服务器得到同一分区 */
+  static normalizeServer(server: string): string {
+    let value: string = server.trim().toLowerCase();
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    return value;
+  }
+
   /**
-   * 账号隔离键：服务器地址 + userId。
-   * 服务器地址里的 : / 等字符不能出现在文件名里，统一替换成下划线。
-   * 游客（userId <= 0）单独一份，绝不与登录账号混用。
+   * 账号隔离键：对「规范化服务器地址 + userId」取双段哈希（16 位十六进制）。
+   *
+   * 为什么不用字符替换：`http://a-b` 与 `http://a_b` 替换后会得到同一个名字，
+   * 不同服务器/用户可能撞到同一分区。哈希把整串压成定长，并用两段不同种子
+   * 降低碰撞概率；读文件时还会用信封里的 profile 字段再校验一次。
    */
   static profileKey(server: string, userId: number): string {
+    const material: string = LocalStore.normalizeServer(server) + '#' + userId.toString();
+    return 'p' + fnv1a(material, 0x811c9dc5) + fnv1a(material, 0x1b873593);
+  }
+
+  /** 上一版的字符串替换键，仅用于把旧草稿迁移过来，不再用于新写入 */
+  static legacyProfileKey(server: string, userId: number): string {
     const safe: string = server.replace(/[^a-zA-Z0-9]/g, '_');
     if (userId > 0) {
       return safe + '_u' + userId.toString();
@@ -78,6 +109,12 @@ export class LocalStore {
       }
       const envelope: StoreEnvelope = JSON.parse(text) as StoreEnvelope;
       if (envelope === null || envelope.format !== 'sbq-local-store') {
+        this.quarantine(target);
+        return null;
+      }
+      // 二次校验：文件内容声明的 profile 必须与请求的分区一致，
+      // 防止文件被复制/改名后串到别人的分区里
+      if (envelope.profile !== profile) {
         this.quarantine(target);
         return null;
       }

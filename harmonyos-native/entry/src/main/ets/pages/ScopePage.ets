@@ -1,16 +1,20 @@
 import { AuthService } from '../service/AuthService';
 import { ApiError } from '../service/ApiService';
-import { ExperimentService, ExperimentSummary } from '../service/ExperimentService';
+import { ExperimentPage, ExperimentService, ExperimentSummary, ImportOutcome } from '../service/ExperimentService';
 import { DraftRecord, DraftService } from '../service/DraftService';
-import { LocalStore } from '../service/LocalStore';
 import { SessionService } from '../service/SessionService';
 import { common } from '@kit.AbilityKit';
+import { ImportItem, TransferSummary, classifyImport, containsSensitiveField } from '../service/ExperimentTransfer';
+import { ExportFiles, ExportFileInfo } from '../service/ExportFiles';
 import { router } from '@kit.ArkUI';
 import { Palette, Layout, Limits } from '../common/ScopeConstants';
 import { ScopeSetup, WaveOptions, WaveOption } from '../model/ScopeTypes';
 import { ScopeRenderer, ModeNames } from '../view/ScopeRenderer';
 import { ScopeSlider } from '../view/ScopeSlider';
 import { WaveMath } from '../model/WaveMath';
+
+/** 记录分页大小（所有 import 之后才能声明，否则会触发 arkts-no-misplaced-imports） */
+const RECORD_PAGE_SIZE: number = 20;
 
 /**
  * 示波器主界面：Canvas 绘图 + 控制面板。
@@ -29,6 +33,9 @@ struct ScopePage {
   private draftService: DraftService | null = null;
   private draftTick: number = 0;
   private lastDraftSignature: string = '';
+  /** 导出文件读写 + 待确认的导入条目（两步式导入用） */
+  private exportFiles: ExportFiles | null = null;
+  private pendingImportValid: ImportItem[] = [];
 
   @State recordsOpen: boolean = false;
   @State recordBusy: boolean = false;
@@ -43,6 +50,16 @@ struct ScopePage {
   @State draftSavedAtText: string = '';
   @State draftMessage: string = '';
   @State tokenExpired: boolean = false;
+  /** 任务 6：搜索分页、内联编辑、导出导入 */
+  @State searchQuery: string = '';
+  @State recordTotal: number = 0;
+  @State recordHasMore: boolean = false;
+  @State editingId: string = '';
+  @State editTitle: string = '';
+  @State editNotes: string = '';
+  @State importPath: string = '';
+  @State importSummary: string = '';
+  @State transferMessage: string = '';
   @State userName: string = '访客';
   @State running: boolean = true;
   @State displayMode: string = 'dual';
@@ -103,7 +120,8 @@ struct ScopePage {
         return;
       }
       this.draftService = new DraftService((context as common.UIAbilityContext).filesDir);
-      const draft: DraftRecord | null = this.draftService.load(this.draftProfile());
+      this.exportFiles = new ExportFiles((context as common.UIAbilityContext).filesDir);
+      const draft: DraftRecord | null = this.draftService.load(this.draftServer(), this.draftUserId());
       if (draft !== null) {
         this.draftFound = true;
         this.draftSavedAtText = new Date(draft.savedAtMs).toLocaleString();
@@ -113,12 +131,13 @@ struct ScopePage {
     }
   }
 
-  /** 账号隔离：服务器地址 + userId；游客单独一份 */
-  private draftProfile(): string {
-    return LocalStore.profileKey(
-      AppStorage.get<string>('server') || '',
-      AppStorage.get<number>('userId') || 0
-    );
+  /** 分区依据：当前服务器地址 + 登录用户 id（游客为 0，单独分区） */
+  private draftServer(): string {
+    return AppStorage.get<string>('server') || '';
+  }
+
+  private draftUserId(): number {
+    return AppStorage.get<number>('userId') || 0;
   }
 
   /** 只把会影响画面的参数纳入签名，刻意排除每帧都在变的运行时长 */
@@ -133,11 +152,15 @@ struct ScopePage {
     if (this.draftService === null || this.draftService === undefined) {
       return;
     }
+    // 恢复提示还挂着时绝不能写盘：否则会用初始参数覆盖掉用户上次的现场
+    if (this.draftFound) {
+      return;
+    }
     const signature: string = this.draftSignature();
     if (signature === this.lastDraftSignature) {
       return;
     }
-    const ok: boolean = this.draftService.save(this.draftProfile(), this.buildSetup());
+    const ok: boolean = this.draftService.save(this.draftServer(), this.draftUserId(), this.buildSetup());
     if (ok) {
       this.lastDraftSignature = signature;
       this.draftMessage = '已在本机自动保存草稿 ' + new Date().toLocaleTimeString();
@@ -148,7 +171,7 @@ struct ScopePage {
     if (this.draftService === null || this.draftService === undefined) {
       return;
     }
-    const draft: DraftRecord | null = this.draftService.load(this.draftProfile());
+    const draft: DraftRecord | null = this.draftService.load(this.draftServer(), this.draftUserId());
     this.draftFound = false;
     if (draft === null) {
       this.draftMessage = '草稿已损坏，未恢复（坏文件已隔离）';
@@ -172,10 +195,11 @@ struct ScopePage {
 
   private discardDraft(): void {
     if (this.draftService !== null && this.draftService !== undefined) {
-      this.draftService.clear(this.draftProfile());
+      this.draftService.clear(this.draftServer(), this.draftUserId());
     }
     this.draftFound = false;
-    this.lastDraftSignature = '';
+    // 以当前参数作为新的基线，避免刚删完就立刻把默认值又存成草稿
+    this.lastDraftSignature = this.draftSignature();
     this.draftMessage = '已删除本机草稿';
   }
 
@@ -260,14 +284,152 @@ struct ScopePage {
     return true;
   }
 
+  /** 加载第一页（也是搜索与刷新的入口）：分页归零并替换列表 */
   private async loadRecords(): Promise<void> {
     if (this.recordBusy || !this.loggedIn) return;
     this.recordBusy = true;
     try {
-      this.records = await ExperimentService.list();
-      this.recordMessage = this.records.length === 0 ? '暂无记录，保存当前参数开始第一次实验' : '已刷新实验记录';
+      const page: ExperimentPage = await ExperimentService.listPage(this.searchQuery, RECORD_PAGE_SIZE, 0);
+      this.records = page.items;
+      this.recordTotal = page.total;
+      this.recordHasMore = this.records.length < page.total;
+      if (page.total === 0) {
+        this.recordMessage = this.searchQuery.trim().length > 0
+          ? '没有匹配的记录' : '暂无记录，保存当前参数开始第一次实验';
+      } else {
+        this.recordMessage = '已加载 ' + this.records.length.toString() + ' / ' + page.total.toString() + ' 条';
+      }
+    } catch (error) {
+      // 失败时保留搜索词与已加载内容，方便直接重试
+      this.recordMessage = (error as Error).message;
+    } finally { this.recordBusy = false; }
+  }
+
+  /** 追加下一页 */
+  private async loadMore(): Promise<void> {
+    if (this.recordBusy || !this.loggedIn || !this.recordHasMore) return;
+    this.recordBusy = true;
+    try {
+      const page: ExperimentPage = await ExperimentService.listPage(this.searchQuery, RECORD_PAGE_SIZE, this.records.length);
+      this.records = this.records.concat(page.items);
+      this.recordTotal = page.total;
+      this.recordHasMore = this.records.length < page.total;
+      this.recordMessage = '已加载 ' + this.records.length.toString() + ' / ' + page.total.toString() + ' 条';
     } catch (error) { this.recordMessage = (error as Error).message; }
     finally { this.recordBusy = false; }
+  }
+
+  /** 清空搜索条件并回到第一页 */
+  private resetSearch(): void {
+    this.searchQuery = '';
+    this.loadRecords();
+  }
+
+  private startEdit(item: ExperimentSummary): void {
+    this.editingId = item.id;
+    this.editTitle = item.title;
+    this.editNotes = item.notes;
+    this.pendingDelete = '';
+  }
+
+  private cancelEdit(): void {
+    this.editingId = '';
+    this.editTitle = '';
+    this.editNotes = '';
+  }
+
+  private async saveEdit(id: string): Promise<void> {
+    if (this.recordBusy) return;
+    const title: string = this.editTitle.trim();
+    if (title.length === 0) {
+      this.recordMessage = '标题不能为空';
+      return;
+    }
+    this.recordBusy = true;
+    try {
+      await ExperimentService.update(id, title, this.editNotes);
+      this.cancelEdit();
+      this.recordMessage = '已保存修改';
+      await this.loadRecords();
+    } catch (error) {
+      // 失败保留编辑框内容，避免用户重填
+      this.recordMessage = (error as Error).message;
+    } finally { this.recordBusy = false; }
+  }
+
+  private async doExport(): Promise<void> {
+    if (this.recordBusy) return;
+    this.recordBusy = true;
+    try {
+      const text: string = await ExperimentService.exportAll();
+      if (containsSensitiveField(text)) {
+        throw new Error('导出内容含敏感字段，已中止');
+      }
+      if (this.exportFiles === null || this.exportFiles === undefined) {
+        throw new Error('应用存储目录不可用');
+      }
+      const info: ExportFileInfo = this.exportFiles.write(text);
+      this.transferMessage = '已导出 ' + info.name + '（' + Math.ceil(info.sizeBytes / 1024).toString() +
+        ' KB）\n' + info.path;
+    } catch (error) { this.transferMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+
+  /** 导入第一步：解析并统计，不写入 */
+  private prepareImport(path: string): void {
+    this.pendingImportValid = [];
+    this.importSummary = '';
+    const target: string = path.trim();
+    if (target.length === 0) {
+      this.transferMessage = '请先选择或填写导入文件路径';
+      return;
+    }
+    try {
+      if (this.exportFiles === null || this.exportFiles === undefined) {
+        throw new Error('应用存储目录不可用');
+      }
+      const text: string = this.exportFiles.read(target);
+      const summary: TransferSummary = classifyImport(text);
+      this.pendingImportValid = summary.valid;
+      const head: string = '有效 ' + summary.validCount.toString() + ' 条；跳过（网页 v1）' +
+        summary.skippedV1.toString() + ' 条；失败 ' + summary.failed.toString() + ' 条';
+      this.importSummary = head;
+      this.transferMessage = summary.errors.length > 0 ? head + '\n' + summary.errors.slice(0, 5).join('\n') : head;
+    } catch (error) { this.transferMessage = '读取失败：' + (error as Error).message; }
+  }
+
+  /** 导入第二步：用户确认后才真正写入 */
+  private async confirmImport(): Promise<void> {
+    if (this.recordBusy) return;
+    if (this.pendingImportValid.length === 0) {
+      this.transferMessage = '没有可导入的 v2 记录（网页 v1 不会被导入）';
+      return;
+    }
+    this.recordBusy = true;
+    try {
+      const outcome: ImportOutcome = await ExperimentService.importItems(this.pendingImportValid);
+      this.transferMessage = this.importSummary + '\n已写入服务器 ' + outcome.imported.toString() + ' 条' +
+        (outcome.skipped > 0 ? '，服务器跳过 ' + outcome.skipped.toString() + ' 条' : '');
+      this.pendingImportValid = [];
+      this.importSummary = '';
+      await this.loadRecords();
+    } catch (error) { this.transferMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+
+  /** 填最近一次导出的文件路径 */
+  private useLatestExport(): void {
+    if (this.exportFiles === null || this.exportFiles === undefined) {
+      this.transferMessage = '应用存储目录不可用';
+      return;
+    }
+    const list: ExportFileInfo[] = this.exportFiles.list();
+    if (list.length === 0) {
+      this.transferMessage = '还没有导出过文件';
+      return;
+    }
+    this.importPath = list[0].path;
+    this.transferMessage = '已选择：' + list[0].name;
   }
   private async saveRecord(): Promise<void> {
     if (this.recordBusy || !this.loggedIn) return;
@@ -351,7 +513,22 @@ struct ScopePage {
             Button('保存当前实验').enabled(!this.recordBusy).onClick(() => { this.saveRecord(); })
             Button('刷新记录').enabled(!this.recordBusy).onClick(() => { this.loadRecords(); })
           }
+          Row({ space: 8 }) {
+            TextInput({ text: this.searchQuery, placeholder: '搜索标题或备注' })
+              .layoutWeight(1).height(36).enabled(!this.recordBusy)
+              .onChange((value: string) => { this.searchQuery = value; })
+            Button('搜索').height(36).enabled(!this.recordBusy)
+              .onClick(() => { this.loadRecords(); })
+            Button('清空').height(36)
+              .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+              .border({ width: 1, color: '#25323d' }).enabled(!this.recordBusy)
+              .onClick(() => { this.resetSearch(); })
+          }.width('100%')
           Text(this.recordBusy ? '正在处理…' : this.recordMessage).fontColor('#d5e6dc').fontSize(12)
+          if (this.recordTotal > 0) {
+            Text('共 ' + this.recordTotal.toString() + ' 条，已加载 ' + this.records.length.toString() + ' 条')
+              .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+          }
           if (this.tokenExpired) {
             Text('登录已过期：本机草稿仍可离线使用，保存到云端前需重新登录。')
               .fontColor('#ffb74d').fontSize(11).width('100%')
@@ -361,24 +538,66 @@ struct ScopePage {
           }
           ForEach(this.records, (item: ExperimentSummary) => {
             Column({ space: 6 }) {
-              Text(item.title + (item.stateVersion === 2 ? ' · 原生' : ' · 网页'))
-                .fontColor('#ffffff').width('100%')
-              Text(item.createdAt).fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
-              if (item.notes.length > 0) { Text(item.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%') }
-              Row({ space: 8 }) {
-                Button('恢复参数').enabled(!this.recordBusy && item.stateVersion === 2)
-                  .onClick(() => { this.restoreRecord(item); })
-                Button(this.pendingDelete === item.id ? '确认删除' : '删除').enabled(!this.recordBusy)
-                  .onClick(() => {
-                    if (this.pendingDelete === item.id) this.deleteRecord(item.id);
-                    else this.pendingDelete = item.id;
-                  })
-                if (this.pendingDelete === item.id) {
-                  Button('取消').onClick(() => { this.pendingDelete = ''; })
+              if (this.editingId === item.id) {
+                TextInput({ text: this.editTitle, placeholder: '实验标题（1–80 位）' })
+                  .maxLength(80).enabled(!this.recordBusy).width('100%')
+                  .onChange((value: string) => { this.editTitle = value; })
+                TextArea({ text: this.editNotes, placeholder: '实验备注（可选）' })
+                  .maxLength(2000).height(60).enabled(!this.recordBusy).width('100%')
+                  .onChange((value: string) => { this.editNotes = value; })
+                Row({ space: 8 }) {
+                  Button('保存修改').enabled(!this.recordBusy).onClick(() => { this.saveEdit(item.id); })
+                  Button('取消').enabled(!this.recordBusy)
+                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                    .border({ width: 1, color: '#25323d' })
+                    .onClick(() => { this.cancelEdit(); })
+                }
+              } else {
+                Text(item.title + (item.stateVersion === 2 ? ' · 原生' : ' · 网页'))
+                  .fontColor('#ffffff').width('100%')
+                Text(item.createdAt).fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+                if (item.notes.length > 0) { Text(item.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%') }
+                Row({ space: 8 }) {
+                  Button('恢复参数').enabled(!this.recordBusy && item.stateVersion === 2)
+                    .onClick(() => { this.restoreRecord(item); })
+                  Button('编辑').enabled(!this.recordBusy)
+                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                    .border({ width: 1, color: '#25323d' })
+                    .onClick(() => { this.startEdit(item); })
+                  Button(this.pendingDelete === item.id ? '确认删除' : '删除').enabled(!this.recordBusy)
+                    .onClick(() => {
+                      if (this.pendingDelete === item.id) this.deleteRecord(item.id);
+                      else this.pendingDelete = item.id;
+                    })
+                  if (this.pendingDelete === item.id) {
+                    Button('取消').onClick(() => { this.pendingDelete = ''; })
+                  }
                 }
               }
             }.width('100%').padding(10).backgroundColor(Palette.PANEL_ITEM).borderRadius(8)
           }, (item: ExperimentSummary) => item.id)
+          if (this.recordHasMore) {
+            Button('加载更多').width('100%').enabled(!this.recordBusy)
+              .onClick(() => { this.loadMore(); })
+          }
+          Divider().color('#25323d')
+          Text('导出 / 导入').fontColor('#e8f4ec').fontSize(12).width('100%')
+          Row({ space: 8 }) {
+            Button('导出到文件').enabled(!this.recordBusy).onClick(() => { this.doExport(); })
+            Button('选最近导出').enabled(!this.recordBusy).onClick(() => { this.useLatestExport(); })
+          }
+          TextInput({ text: this.importPath, placeholder: '导入文件路径（.json）' })
+            .enabled(!this.recordBusy).width('100%')
+            .onChange((value: string) => { this.importPath = value; })
+          Row({ space: 8 }) {
+            Button('解析').enabled(!this.recordBusy)
+              .onClick(() => { this.prepareImport(this.importPath); })
+            Button('确认导入').enabled(!this.recordBusy && this.pendingImportValid.length > 0)
+              .onClick(() => { this.confirmImport(); })
+          }
+          if (this.transferMessage.length > 0) {
+            Text(this.transferMessage).fontColor(Palette.PANEL_TEXT).fontSize(11).width('100%')
+          }
         } else {
           Text('游客不能保存实验，请退出并注册或登录账号。').fontColor(Palette.PANEL_TEXT).fontSize(12)
         }

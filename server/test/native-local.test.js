@@ -25,16 +25,25 @@ test('local store, draft and session logic on host', async t => {
   // ---- 内存文件系统替身 ----
   fs.writeFileSync(path.join(work, 'kit_CoreFileKit.mjs'), `
     export const __files = new Map();
+    export const __dirs = new Set();
     export const fileIo = {
       OpenMode: { CREATE: 64, READ_WRITE: 2, TRUNC: 512 },
-      accessSync: p => __files.has(p),
-      mkdirSync: () => {},
+      // 目录也要"存在"，否则 listFileSync 前的 accessSync 会直接判否
+      accessSync: p => __files.has(p) || __dirs.has(p),
+      mkdirSync: p => { __dirs.add(p); },
       openSync: p => ({ fd: p }),
       writeSync: (fd, text) => { __files.set(fd, text); return text.length; },
       closeSync: () => {},
       readTextSync: p => { if (!__files.has(p)) { throw new Error('ENOENT'); } return __files.get(p); },
       renameSync: (a, b) => { if (!__files.has(a)) { throw new Error('ENOENT'); } __files.set(b, __files.get(a)); __files.delete(a); },
-      unlinkSync: p => { __files.delete(p); }
+      unlinkSync: p => { __files.delete(p); },
+      listFileSync: dir => [...__files.keys()]
+        .filter(p => p.startsWith(dir + '/') && p.substring(dir.length + 1).indexOf('/') < 0)
+        .map(p => p.substring(dir.length + 1)),
+      statSync: p => {
+        if (!__files.has(p)) { throw new Error('ENOENT'); }
+        return { size: __files.get(p).length, mtime: Math.floor(Date.now() / 1000), isDirectory: () => false, isFile: () => true };
+      }
     };
   `);
 
@@ -80,7 +89,9 @@ test('local store, draft and session logic on host', async t => {
     ScopeTypes: 'model/ScopeTypes',
     LocalStore: 'service/LocalStore',
     DraftService: 'service/DraftService',
-    SessionService: 'service/SessionService'
+    SessionService: 'service/SessionService',
+    ExperimentTransfer: 'service/ExperimentTransfer',
+    ExportFiles: 'service/ExportFiles'
   };
   for (const [outName, rel] of Object.entries(sources)) {
     const code = fs.readFileSync(path.join(root, rel + '.ets'), 'utf8');
@@ -94,9 +105,12 @@ test('local store, draft and session logic on host', async t => {
   const { DraftService, isValidDraftSetup } = await import(pathToFileURL(path.join(work, 'DraftService.mjs')));
   const { SessionService, SessionInfo } = await import(pathToFileURL(path.join(work, 'SessionService.mjs')));
   const { ScopeSetup } = await import(pathToFileURL(path.join(work, 'ScopeTypes.mjs')));
+  const { classifyImport, containsSensitiveField, exportFileName } = await import(pathToFileURL(path.join(work, 'ExperimentTransfer.mjs')));
+  const { ExportFiles } = await import(pathToFileURL(path.join(work, 'ExportFiles.mjs')));
   const { __files } = await import(pathToFileURL(path.join(work, 'kit_CoreFileKit.mjs')));
   const { __vault } = await import(pathToFileURL(path.join(work, 'kit_AssetStoreKit.mjs')));
 
+  const SERVER = 'http://127.0.0.1:3000';
   const store = new LocalStore('/data/app');
 
   await t.test('本地存储写入后能读回，且不残留临时文件', () => {
@@ -125,16 +139,30 @@ test('local store, draft and session logic on host', async t => {
     assert.equal(__files.get(target), envelope, '不能覆盖更高版本的文件');
   });
 
-  await t.test('账号隔离键：服务器 + userId，游客单独一份', () => {
+  await t.test('账号隔离键：哈希分区且可规范化', () => {
     const a = LocalStore.profileKey('http://192.168.1.10:3000', 7);
     const b = LocalStore.profileKey('http://192.168.1.10:3000', 8);
     const c = LocalStore.profileKey('http://192.168.1.10:3000', 0);
     const d = LocalStore.profileKey('http://10.0.0.2:3000', 7);
+    assert.match(a, /^p[0-9a-f]{16}$/, '分区键应为定长十六进制哈希');
     assert.notEqual(a, b, '不同 userId 必须隔离');
     assert.notEqual(a, d, '不同服务器必须隔离');
-    assert.ok(c.includes('guest'), '游客使用独立分区');
-    assert.equal(a.includes(':'), false, '文件名里不能出现冒号');
-    assert.equal(a.includes('/'), false, '文件名里不能出现斜杠');
+    assert.notEqual(a, c, '游客与登录用户必须隔离');
+    // 规范化：大小写、结尾斜杠不影响同一分区
+    assert.equal(LocalStore.profileKey('HTTP://192.168.1.10:3000/', 7), a);
+    // 字符替换会把这两个地址撞在一起，哈希不应碰撞
+    assert.notEqual(LocalStore.profileKey('http://a-b', 7), LocalStore.profileKey('http://a_b', 7),
+      '字符替换会碰撞的地址，哈希后必须不同');
+    assert.ok(LocalStore.legacyProfileKey('http://127.0.0.1:3000', 0).includes('guest'));
+  });
+
+  await t.test('文件内 profile 与请求分区不一致时被隔离', () => {
+    const target = '/data/app/sbq-store/pdeadbeefdeadbeef.json';
+    __files.set(target, JSON.stringify({
+      format: 'sbq-local-store', version: 1, profile: 'someone-else', payload: 'secret'
+    }));
+    assert.equal(store.read('pdeadbeefdeadbeef'), null, '不能读到别人分区的内容');
+    assert.ok([...__files.keys()].some(p => p.includes('.bad-')), '不一致的文件应被隔离');
   });
 
   await t.test('草稿保存/读取往返一致', () => {
@@ -145,16 +173,29 @@ test('local store, draft and session logic on host', async t => {
     setup.ch1.waveType = 'triangle';
     setup.ch2.frequency = 120;
     setup.ch2.phaseDeg = 90;
-    assert.equal(drafts.save('u7', setup), true);
-    const loaded = drafts.load('u7');
+    assert.equal(drafts.save(SERVER, 7, setup), true);
+    const loaded = drafts.load(SERVER, 7);
     assert.ok(loaded, '草稿应能读回');
     assert.equal(loaded.setup.displayMode, 'overlay');
     assert.equal(loaded.setup.ch1.waveType, 'triangle');
     assert.equal(loaded.setup.ch2.frequency, 120);
     assert.equal(loaded.setup.runTimeSec, 0, '运行时长应被归零');
     assert.ok(loaded.savedAtMs > 0);
-    drafts.clear('u7');
-    assert.equal(drafts.load('u7'), null);
+    drafts.clear(SERVER, 7);
+    assert.equal(drafts.load(SERVER, 7), null);
+  });
+
+  await t.test('旧版字符键的草稿能迁移到哈希分区', () => {
+    const drafts = new DraftService('/data/app');
+    const legacy = LocalStore.legacyProfileKey(SERVER, 42);
+    const record = { savedAtMs: Date.now(), setup: new ScopeSetup() };
+    __files.set('/data/app/sbq-store/' + legacy + '.json', JSON.stringify({
+      format: 'sbq-local-store', version: 1, profile: legacy, payload: JSON.stringify(record)
+    }));
+    const loaded = drafts.load(SERVER, 42);
+    assert.ok(loaded, '旧键草稿应被读到并迁移');
+    assert.ok(__files.has('/data/app/sbq-store/' + LocalStore.profileKey(SERVER, 42) + '.json'), '迁移后应写入新分区');
+    assert.equal(__files.has('/data/app/sbq-store/' + legacy + '.json'), false, '旧文件应被删除');
   });
 
   await t.test('越界草稿被拒绝，不把坏数据画到屏幕', () => {
@@ -162,8 +203,8 @@ test('local store, draft and session logic on host', async t => {
     const bad = new ScopeSetup();
     bad.timeDiv = 5;           // 上限 0.5
     assert.equal(isValidDraftSetup(bad), false);
-    assert.equal(drafts.save('u8', bad), true, '保存不做校验（当前现场就是用户所见）');
-    assert.equal(drafts.load('u8'), null, '读取时必须拒绝越界数据');
+    assert.equal(drafts.save(SERVER, 8, bad), true, '保存不做校验（当前现场就是用户所见）');
+    assert.equal(drafts.load(SERVER, 8), null, '读取时必须拒绝越界数据');
   });
 
   await t.test('会话：写入密钥库后能恢复', async () => {
@@ -211,5 +252,50 @@ test('local store, draft and session logic on host', async t => {
     assert.equal(await SessionService.restore(), null);
     assert.equal(__vault.size, 0);
     await SessionService.clear(); // 重复清除不应抛异常
+  });
+
+  await t.test('导入分类：v2 有效、网页 v1 跳过、结构错误失败', () => {
+    const payload = {
+      format: 'sbq-experiments',
+      items: [
+        { title: 'v2 记录', state: { version: 2, parameters: {} } },
+        { title: '网页记录', state: { version: 1, parameters: {} } },
+        { title: '', state: { version: 2, parameters: {} } },
+        { title: '坏版本', state: { version: 9, parameters: {} } }
+      ]
+    };
+    const summary = classifyImport(JSON.stringify(payload));
+    assert.equal(summary.validCount, 1, '只有 v2 进入待写入队列');
+    assert.equal(summary.skippedV1, 1, '网页 v1 记为跳过');
+    assert.equal(summary.failed, 2, '空标题与未知版本记为失败');
+    assert.equal(summary.errors.length, 3);
+  });
+
+  await t.test('导入分类：非 JSON / 缺 items 直接失败', () => {
+    assert.equal(classifyImport('not json').failed, 1);
+    assert.equal(classifyImport('{"items": "x"}').failed, 1);
+    assert.equal(classifyImport('   ').failed, 1);
+  });
+
+  await t.test('导出内容敏感字段检查', () => {
+    assert.equal(containsSensitiveField('{"token":"abc"}'), true);
+    assert.equal(containsSensitiveField('{"password":"x"}'), true);
+    assert.equal(containsSensitiveField('{"session":"s"}'), true);
+    assert.equal(containsSensitiveField('{"items":[{"title":"双通道"}]}'), false);
+  });
+
+  await t.test('导出文件名格式稳定', () => {
+    assert.equal(exportFileName(new Date(2026, 10, 4, 8, 5, 9)), 'sbq-experiments-20261104-080509.json');
+  });
+
+  await t.test('导出文件：写入后可列举可读回，且不残留临时文件', () => {
+    const files = new ExportFiles('/data/app');
+    const info = files.write('{"items":[]}');
+    assert.ok(info.path.endsWith('.json'));
+    assert.ok(info.sizeBytes > 0);
+    const list = files.list();
+    assert.equal(list.length, 1);
+    assert.equal(files.read(info.path), '{"items":[]}');
+    assert.equal([...__files.keys()].some(p => p.endsWith('.tmp')), false, '导出也不应残留 .tmp');
   });
 });

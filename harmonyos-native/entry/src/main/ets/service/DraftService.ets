@@ -79,23 +79,36 @@ export class DraftService {
   }
 
   /** 保存草稿；失败由调用方忽略（草稿不是关键路径） */
-  save(profile: string, setup: ScopeSetup): boolean {
+  save(server: string, userId: number, setup: ScopeSetup): boolean {
     try {
       const record: DraftRecord = new DraftRecord();
       record.savedAtMs = Date.now();
       // runTimeSec 每帧都在变，存下来没有意义，统一归零
       setup.runTimeSec = 0;
       record.setup = setup;
-      this.store.write(profile, JSON.stringify(record));
+      this.store.write(LocalStore.profileKey(server, userId), JSON.stringify(record));
       return true;
     } catch (_) {
       return false;
     }
   }
 
-  /** 读取草稿；损坏或越界返回 null（坏文件已被隔离） */
-  load(profile: string): DraftRecord | null {
-    const payload: string | null = this.store.read(profile);
+  /**
+   * 读取草稿；损坏或越界返回 null（坏文件已被隔离）。
+   * 若新分区键没有、旧版（字符替换键）有，则迁移一次，避免升级后草稿"消失"。
+   */
+  load(server: string, userId: number): DraftRecord | null {
+    const profile: string = LocalStore.profileKey(server, userId);
+    let payload: string | null = this.store.read(profile);
+    if (payload === null) {
+      const legacyProfile: string = LocalStore.legacyProfileKey(server, userId);
+      const legacyPayload: string | null = this.store.read(legacyProfile);
+      if (legacyPayload !== null) {
+        this.store.write(profile, legacyPayload);
+        this.store.remove(legacyProfile);
+        payload = legacyPayload;
+      }
+    }
     if (payload === null) {
       return null;
     }
@@ -110,7 +123,7 @@ export class DraftService {
     }
   }
 
-  clear(profile: string): void {
-    this.store.remove(profile);
+  clear(server: string, userId: number): void {
+    this.store.remove(LocalStore.profileKey(server, userId));
   }
 }

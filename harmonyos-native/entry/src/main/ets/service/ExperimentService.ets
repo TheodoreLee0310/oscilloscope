@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { ApiService } from './ApiService';
 import { ScopeSetup } from '../model/ScopeTypes';
+import { ImportItem } from './ExperimentTransfer';
 
 export class NativeState {
   version: number = 2;
@@ -12,6 +13,34 @@ export interface ExperimentSummary {
   notes: string;
   createdAt: string;
   stateVersion: number;
+}
+/** 分页结果：items 之外还带总数，便于「加载更多」 */
+export class ExperimentPage {
+  items: ExperimentSummary[] = [];
+  total: number = 0;
+  limit: number = 0;
+  offset: number = 0;
+}
+/** 导入结果：服务器实际写入数与跳过数 */
+export class ImportOutcome {
+  imported: number = 0;
+  skipped: number = 0;
+  errors: string[] = [];
+}
+class UpdateBody {
+  title: string;
+  notes: string;
+  constructor(title: string, notes: string) {
+    this.title = title;
+    this.notes = notes;
+  }
+}
+class ImportBody {
+  format: string = 'sbq-experiments';
+  items: ImportItem[] = [];
+  constructor(items: ImportItem[]) {
+    this.items = items;
+  }
 }
 interface Experiment extends ExperimentSummary { state: NativeState; }
 interface ListBody { items: ExperimentSummary[]; }
@@ -51,5 +80,43 @@ export class ExperimentService {
   }
   static async remove(id: string): Promise<void> {
     await ExperimentService.request('/experiments/' + encodeURIComponent(id), http.RequestMethod.DELETE);
+  }
+
+  /** 搜索 + 分页；keyword 为空表示不筛选 */
+  static async listPage(keyword: string, limit: number, offset: number): Promise<ExperimentPage> {
+    const params: string[] = [];
+    if (keyword.trim().length > 0) {
+      params.push('q=' + encodeURIComponent(keyword.trim()));
+    }
+    params.push('limit=' + limit.toString());
+    params.push('offset=' + offset.toString());
+    const text: string = await ExperimentService.request('/experiments?' + params.join('&'), http.RequestMethod.GET);
+    const page: ExperimentPage = JSON.parse(text) as ExperimentPage;
+    if (page.items === null || page.items === undefined) {
+      page.items = [];
+    }
+    return page;
+  }
+
+  /** 重命名 / 修改备注（只改这两项，参数保持不动） */
+  static async update(id: string, title: string, notes: string): Promise<void> {
+    await ExperimentService.request('/experiments/' + encodeURIComponent(id), http.RequestMethod.PUT,
+      JSON.stringify(new UpdateBody(title, notes)));
+  }
+
+  /** 导出：返回服务器生成的 JSON 原文（只含实验数据） */
+  static async exportAll(): Promise<string> {
+    return ExperimentService.request('/experiments/export', http.RequestMethod.GET);
+  }
+
+  /** 导入：只发送已确认为 v2 的条目 */
+  static async importItems(items: ImportItem[]): Promise<ImportOutcome> {
+    const text: string = await ExperimentService.request('/experiments/import', http.RequestMethod.POST,
+      JSON.stringify(new ImportBody(items)));
+    const outcome: ImportOutcome = JSON.parse(text) as ImportOutcome;
+    if (outcome.errors === null || outcome.errors === undefined) {
+      outcome.errors = [];
+    }
+    return outcome;
   }
 }
