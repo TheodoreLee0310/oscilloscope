@@ -54,7 +54,7 @@ harmonyos-native/
 
 ## 四、构建
 
-要求：DevEco Studio 26（HarmonyOS SDK API 26）+ JDK 21。
+要求：DevEco Studio 5.0+、HarmonyOS SDK 5.0.0（API 12）和配套 JDK。
 
 **方式一（推荐）**：DevEco Studio 直接 `File → Open` 本目录，等 Sync 完成后 `Run`。
 
@@ -78,8 +78,7 @@ hdc install -r entry/build/default/outputs/default/entry-default-unsigned.hap
 hdc shell aa start -a EntryAbility -b com.example.oscilloscope
 ```
 
-> `build-profile.json5` 中 `compatibleSdkVersion` / `targetSdkVersion` 均为 `"26.0.0"`。
-> API 26 起版本号必须是字符串（写成 `"26"` 会报 `00306042`）；官方模拟器接受**未签名** HAP，本工程未配置 `signingConfigs`。
+> `build-profile.json5` 的兼容及目标 SDK 均为 `"5.0.0(12)"`。本工程未配置 `signingConfigs`；真机安装需要配置签名。
 
 ## 五、已验证
 
@@ -92,5 +91,5 @@ hdc shell aa start -a EntryAbility -b com.example.oscilloscope
 ## 六、已知限制
 
 - 没有 Three.js 的三维电子枪与 CRT 外壳（这是 `harmonyos/` 路线保留的部分）
-- 登录后端默认地址为 `http://10.0.2.2:3001`（模拟器访问宿主机的地址），真机需在登录页"服务器地址"里改成局域网 IP
+- 本仓库不包含登录后端；HTTP 登录需要自行提供兼容 `/api/login` 的服务。默认地址为 `http://10.0.2.2:3001`（模拟器访问宿主机），真机需在登录页改为可访问的服务器地址；也可使用游客模式。
 - 未做余辉拖尾（残影）动画

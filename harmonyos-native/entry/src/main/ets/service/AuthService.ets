@@ -33,7 +33,7 @@ export class LoginResult {
 }
 
 /**
- * 登录服务：对接原有 Express 后端（server/index.js）
+ * 登录服务：对接兼容下述接口的独立后端（本仓库未提供后端）
  * POST /api/login  →  { message, token, user:{username, displayName, role} }
  * 注意：本项目后端不是 WebSocket，是普通 HTTP 接口，端上要用 @kit.NetworkKit 的 http 模块。
  */

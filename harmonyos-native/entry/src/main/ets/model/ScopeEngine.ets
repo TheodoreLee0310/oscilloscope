@@ -34,7 +34,7 @@ export class ScopeEngine {
       const t: number = timeStart + reversedX * dt;
       const phaseVal: number = WaveMath.TWO_PI * ch.frequency * t + phiCh;
       const v: number = WaveMath.voltage(ch.waveType, phaseVal, ch.amplitude);
-      buf.xs.push(x);
+      buf.xs.push(x * width / (n - 1));
       buf.ys.push(baseY - (v / ch.voltsDiv) * pxPerDiv);
       if (v < vMin) {
         vMin = v;
@@ -69,7 +69,7 @@ export class ScopeEngine {
       const v1: number = WaveMath.voltage(c1.waveType, WaveMath.TWO_PI * c1.frequency * t + phi1, c1.amplitude);
       const v2: number = WaveMath.voltage(c2.waveType, WaveMath.TWO_PI * c2.frequency * t + phi2, c2.amplitude);
       const v: number = v1 + v2;
-      buf.xs.push(x);
+      buf.xs.push(x * width / (n - 1));
       buf.ys.push(baseY - (v / div) * pxPerDiv);
       if (v < vMin) {
         vMin = v;

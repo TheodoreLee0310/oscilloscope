@@ -630,7 +630,10 @@ function createVueApp() {
         // 切换到 VR 寻波时，若处于离线模拟模式则确保地图已挂载
         // （面板由 v-if 控制，离开时会被销毁，回来需要重新挂载）
         if (step === 'vrwave') {
-          this.$nextTick(() => this.ensureMockMap());
+          this.$nextTick(() => {
+            if (this.vrwave.mockMapActive) this.ensureMockMap();
+            else if (this.vrwave.mapLoaded) this.initBaiduMap();
+          });
         }
 
         // 如果切换到标准测量模式，输出当前校准参数到控制台
@@ -1337,6 +1340,7 @@ function createVueApp() {
 
       /** 在离线地图上点击选点 */
       handleMockMapPick(point) {
+        this._mapSelectionId = (this._mapSelectionId || 0) + 1;
         const loc = point.location || this.findNearestTerrainLocation(point.lng, point.lat);
         if (loc) {
           if (this._mockMap) this._mockMap.highlightLocation(loc.name);
@@ -1430,6 +1434,7 @@ function createVueApp() {
        */
       handleMapClick(point) {
         if (!this.vrwave.mapInstance) return;
+        const selectionId = this._mapSelectionId = (this._mapSelectionId || 0) + 1;
 
         // 打点（失败不影响后续展示）
         try {
@@ -1462,7 +1467,7 @@ function createVueApp() {
         try {
           const geocoder = new BMap.Geocoder();
           geocoder.getLocation(point, (rs) => {
-            if (!rs) return;
+            if (!rs || selectionId !== this._mapSelectionId) return;
             this.vrwave.locationInfo = {
               lng: point.lng,
               lat: point.lat,
