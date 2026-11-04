@@ -778,6 +778,10 @@ struct ScopePage {
         if (!this.loggedIn) {
           Text('游客记录不能同步，登录后可用。').fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
         }
+        // 明确的边界说明：只推不拉，避免被当成"完整同步"
+        Text('同步方向：仅把本机记录推到服务器。不会从服务器拉取变更，' +
+          '换设备看不到别处修改，因此还不是完整双向同步。')
+          .fontColor('#ffb74d').fontSize(10).width('100%')
         Text(this.localMessage).fontColor('#d5e6dc').fontSize(12).width('100%')
         ForEach(this.localRecords, (record: LocalRecord) => {
           Column({ space: 6 }) {
