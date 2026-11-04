@@ -114,6 +114,10 @@
 
 本轮交付的可执行准备：
 
+- [x] [harmonyos-native/preflight.ps1](harmonyos-native/preflight.ps1)：安装前预检
+      （产物、打包条目、主页面、deviceTypes、INTERNET 权限、签名、应用标识），
+      失败返回非 0 便于接 CI。当前结果：**6 项 PASS，2 项 FAIL，均与签名有关**，
+      即产物本身已具备安装条件，只差签名。
 - [x] [harmonyos-native/DEVICE_ACCEPTANCE.md](harmonyos-native/DEVICE_ACCEPTANCE.md)：
       打通设备的三种路径、签名三条路径、安装/启动/抓日志命令、
       **24 项验收清单**（账号与会话 / 本机记录与文件 / 手动同步 / 稳定性）与结果记录格式。

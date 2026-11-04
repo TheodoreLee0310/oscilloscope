@@ -1,4 +1,4 @@
-# 安装 HAP 到设备并抓日志
+﻿# 安装 HAP 到设备并抓日志
 #
 # 用法：
 #   .\install-and-log.ps1                       # 自动找 signed，找不到就用 unsigned 并提示

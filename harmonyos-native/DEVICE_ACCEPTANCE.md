@@ -53,7 +53,34 @@ hdc tconn <设备IP>:<端口>
 
 验证签名是否生效：`hdc install` 不再报 `9568320 / signature verify failed` 一类错误。
 
-## 3. 安装与启动
+## 3. 安装前预检
+
+接入设备前先跑一次，把"打包类问题"和"设备类问题"分开：
+
+```powershell
+npm run harmonyos:native:build
+.\harmonyos-native\preflight.ps1
+```
+
+检查项：产物存在、必需打包条目（module.json / resources.index / ets/modules.abc /
+main_pages.json）、主页面已打包、deviceTypes、INTERNET 权限、签名配置、已签名产物、应用标识。
+
+当前实测结果（2026-11-04 23:12，提交 1a73afc）：
+
+| 项目 | 结果 | 说明 |
+|---|---|---|
+| HAP 产物 | PASS | entry-default-unsigned.hap（0.64 MB） |
+| 必需打包条目 | PASS | 共 11 个条目 |
+| 主页面已打包 | PASS | main_pages.json 含 pages/Index |
+| 设备类型 | PASS | phone, tablet, 2in1 |
+| 网络权限 | PASS | 已声明 INTERNET |
+| 应用标识 | PASS | com.example.oscilloscope / 1.0.0 |
+| 签名配置 | **FAIL** | signingConfigs 为空 |
+| 已签名产物 | **FAIL** | 只有 unsigned HAP |
+
+即：**除签名外，产物本身已具备安装条件**；签名一到位即可进入下一节。
+
+## 4. 安装与启动
 
 ```powershell
 $hdc = 'D:\huawei-devp\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe'
@@ -68,9 +95,9 @@ $hap = 'harmonyos-native\entry\build\default\outputs\default\entry-default-signe
 
 也可以用 `harmonyos-native\install-and-log.ps1`（本仓库提供，自动做这三步）。
 
-## 4. 验收清单
+## 5. 验收清单
 
-每项填「实际结果」，不要只写"通过"。发现问题的记录到第 6 节。
+每项填「实际结果」，不要只写"通过"。发现问题的记录到第 7 节。
 
 ### 4.1 账号与会话（对应第 2 步）
 
@@ -119,7 +146,7 @@ $hap = 'harmonyos-native\entry\build\default\outputs\default\entry-default-signe
 | 23 | 飞行模式重启应用 | 可进入、可看本机数据 | |
 | 24 | 电量/内存压力下（可选） | 无 ANR、无闪退 | |
 
-## 5. 数据准备与备份
+## 6. 数据准备与备份
 
 设备实测会打到真实后端，动手前先处理数据：
 
@@ -140,7 +167,7 @@ $hap = 'harmonyos-native\entry\build\default\outputs\default\entry-default-signe
   npm run start
   ```
 
-## 6. 记录格式
+## 7. 记录格式
 
 验收完成后按下面格式回填，不要只写"通过"：
 
