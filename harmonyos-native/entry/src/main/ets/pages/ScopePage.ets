@@ -1,3 +1,6 @@
+import { AuthService } from '../service/AuthService';
+import { ApiError } from '../service/ApiService';
+import { ExperimentService, ExperimentSummary } from '../service/ExperimentService';
 import { router } from '@kit.ArkUI';
 import { Palette, Layout, Limits } from '../common/ScopeConstants';
 import { ScopeSetup, WaveOptions, WaveOption } from '../model/ScopeTypes';
@@ -19,6 +22,14 @@ struct ScopePage {
   private startTs: number = 0;
   private frozenSec: number = 0;
 
+  @State recordsOpen: boolean = false;
+  @State recordBusy: boolean = false;
+  @State recordMessage: string = '';
+  @State recordTitle: string = '';
+  @State recordNotes: string = '';
+  @State records: ExperimentSummary[] = [];
+  @State pendingDelete: string = '';
+  @State loggedIn: boolean = false;
   @State userName: string = '访客';
   @State running: boolean = true;
   @State displayMode: string = 'dual';
@@ -50,6 +61,7 @@ struct ScopePage {
     if (stored !== undefined) {
       this.userName = stored;
     }
+    this.loggedIn = (AppStorage.get<string>('token') || '').length > 0;
     this.startTs = Date.now();
     this.timerId = setInterval(() => {
       this.frame();
@@ -110,8 +122,124 @@ struct ScopePage {
     this.running = true;
   }
 
-  private exitToLogin(): void {
+  private async exitToLogin(): Promise<void> {
+    if (this.recordBusy) return;
+    this.recordBusy = true;
+    try {
+      await AuthService.logout();
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        this.recordMessage = (error as Error).message;
+        this.recordsOpen = true; this.recordBusy = false; return;
+      }
+    }
+    AppStorage.setOrCreate('token', '');
+    AppStorage.setOrCreate('displayName', '访客');
+    this.records = [];
+    this.recordBusy = false;
     router.back();
+  }
+
+  onBackPress(): boolean {
+    this.exitToLogin();
+    return true;
+  }
+
+  private async loadRecords(): Promise<void> {
+    if (this.recordBusy || !this.loggedIn) return;
+    this.recordBusy = true;
+    try {
+      this.records = await ExperimentService.list();
+      this.recordMessage = this.records.length === 0 ? '暂无记录，保存当前参数开始第一次实验' : '已刷新实验记录';
+    } catch (error) { this.recordMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+  private async saveRecord(): Promise<void> {
+    if (this.recordBusy || !this.loggedIn) return;
+    this.recordBusy = true;
+    try {
+      const title: string = this.recordTitle.trim() || ('原生实验 ' + new Date().toLocaleString());
+      await ExperimentService.save(title, this.recordNotes, this.buildSetup());
+      this.recordMessage = '保存成功';
+      this.recordTitle = ''; this.recordNotes = '';
+      try { this.records = await ExperimentService.list(); }
+      catch (_) { this.recordMessage = '已保存，但列表刷新失败，请点击刷新记录'; }
+    } catch (error) { this.recordMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+  private async restoreRecord(item: ExperimentSummary): Promise<void> {
+    if (this.recordBusy) return;
+    this.recordBusy = true;
+    try {
+      const setup: ScopeSetup = await ExperimentService.restore(item.id);
+      this.displayMode = setup.displayMode; this.timeDivMs = setup.timeDiv * 1000;
+      this.trigEnabled = setup.triggerEnabled; this.trigLevel = setup.triggerLevel; this.trigRising = setup.triggerRising;
+      this.ch1Enabled = setup.ch1.enabled; this.ch1Type = setup.ch1.waveType; this.ch1Freq = setup.ch1.frequency;
+      this.ch1Amp = setup.ch1.amplitude; this.ch1VoltsDiv = setup.ch1.voltsDiv; this.ch1Pos = setup.ch1.offsetDiv;
+      this.ch2Enabled = setup.ch2.enabled; this.ch2Type = setup.ch2.waveType; this.ch2Freq = setup.ch2.frequency;
+      this.ch2Amp = setup.ch2.amplitude; this.ch2VoltsDiv = setup.ch2.voltsDiv; this.ch2Pos = setup.ch2.offsetDiv;
+      this.phaseDeg = setup.ch2.phaseDeg; this.recordTitle = item.title; this.recordNotes = item.notes;
+      this.resetRun(); this.frame(); this.recordMessage = '已恢复：' + item.title;
+    } catch (error) { this.recordMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+  private async deleteRecord(id: string): Promise<void> {
+    if (this.recordBusy) return;
+    this.recordBusy = true;
+    try {
+      await ExperimentService.remove(id);
+      this.records = this.records.filter((item: ExperimentSummary) => item.id !== id);
+      this.pendingDelete = ''; this.recordMessage = '已删除记录';
+    } catch (error) { this.recordMessage = (error as Error).message; }
+    finally { this.recordBusy = false; }
+  }
+
+  @Builder
+  recordsPanel() {
+    Column({ space: 8 }) {
+      Button(this.recordsOpen ? '收起我的实验' : '我的实验')
+        .width('100%').onClick(() => {
+          this.recordsOpen = !this.recordsOpen;
+          if (this.recordsOpen) this.loadRecords();
+        })
+      if (this.recordsOpen) {
+        if (this.loggedIn) {
+          TextInput({ text: this.recordTitle, placeholder: '实验标题（可选）' })
+            .maxLength(80).enabled(!this.recordBusy)
+            .onChange((value: string) => { this.recordTitle = value; })
+          TextArea({ text: this.recordNotes, placeholder: '实验备注（可选）' })
+            .maxLength(2000).height(70).enabled(!this.recordBusy)
+            .onChange((value: string) => { this.recordNotes = value; })
+          Row({ space: 8 }) {
+            Button('保存当前实验').enabled(!this.recordBusy).onClick(() => { this.saveRecord(); })
+            Button('刷新记录').enabled(!this.recordBusy).onClick(() => { this.loadRecords(); })
+          }
+          Text(this.recordBusy ? '正在处理…' : this.recordMessage).fontColor('#d5e6dc').fontSize(12)
+          ForEach(this.records, (item: ExperimentSummary) => {
+            Column({ space: 6 }) {
+              Text(item.title + (item.stateVersion === 2 ? ' · 原生' : ' · 网页'))
+                .fontColor('#ffffff').width('100%')
+              Text(item.createdAt).fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+              if (item.notes.length > 0) { Text(item.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%') }
+              Row({ space: 8 }) {
+                Button('恢复参数').enabled(!this.recordBusy && item.stateVersion === 2)
+                  .onClick(() => { this.restoreRecord(item); })
+                Button(this.pendingDelete === item.id ? '确认删除' : '删除').enabled(!this.recordBusy)
+                  .onClick(() => {
+                    if (this.pendingDelete === item.id) this.deleteRecord(item.id);
+                    else this.pendingDelete = item.id;
+                  })
+                if (this.pendingDelete === item.id) {
+                  Button('取消').onClick(() => { this.pendingDelete = ''; })
+                }
+              }
+            }.width('100%').padding(10).backgroundColor(Palette.PANEL_ITEM).borderRadius(8)
+          }, (item: ExperimentSummary) => item.id)
+        } else {
+          Text('游客不能保存实验，请退出并注册或登录账号。').fontColor(Palette.PANEL_TEXT).fontSize(12)
+        }
+      }
+    }.width('100%').padding({ bottom: 12 })
   }
 
   // ---------------------------------------------------------------- UI 片段
@@ -488,6 +616,7 @@ struct ScopePage {
 
       Scroll() {
         Column() {
+          this.recordsPanel()
           this.modeRow()
           this.ch1Panel()
           this.ch2Panel()

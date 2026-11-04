@@ -37,7 +37,8 @@
     "server": "node server/index.js",
     "dev:full": "concurrently -k \"npm run server\" \"npm run dev\"",
     "test:backend": "node --test server/test/*.test.js",
-    "test:user-data": "node packaging/test-user-data.js"
+    "test:user-data": "node packaging/test-user-data.js",
+    "harmonyos:native:build": "node packaging/build-harmonyos.js --native"
   },
   "build": {
     "appId": "com.oscilloscope.simulator",

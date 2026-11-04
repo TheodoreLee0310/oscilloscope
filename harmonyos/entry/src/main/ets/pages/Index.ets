@@ -1,3 +1,4 @@
+import { preferences } from '@kit.ArkData';
 import { webview } from '@kit.ArkWeb';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit';
@@ -30,13 +31,46 @@ const HOME_PAGE: string = 'www/index.html';
 @Component
 struct Index {
   private controller: webview.WebviewController = new webview.WebviewController();
+  @State connectionOpen: boolean = true;
+  @State server: string = 'http://127.0.0.1:3000';
+  @State pageSource: ResourceStr = $rawfile(HOME_PAGE);
+  @State connectionMessage: string = '';
   @State loading: boolean = true;
+
+  private async loadServer(): Promise<void> {
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context) {
+        const prefs = await preferences.getPreferences(context, { name: 'connection' });
+        this.server = await prefs.get('server', this.server) as string;
+      }
+    } catch (_) {}
+  }
+  private async connect(): Promise<void> {
+    let origin: string = this.server.trim();
+    while (origin.endsWith('/')) origin = origin.substring(0, origin.length - 1);
+    if (!/^https?:\/\/[a-zA-Z0-9.-]+(:[0-9]{1,5})?$/.test(origin)) {
+      this.connectionMessage = '请输入 http:// 或 https:// 开头的服务器地址，不含网页路径'; return;
+    }
+    this.errorMessage = ''; this.loading = true;
+    this.pageSource = origin + '/login.html';
+    this.connectionOpen = false;
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context) {
+        const prefs = await preferences.getPreferences(context, { name: 'connection' });
+        await prefs.put('server', origin); await prefs.flush();
+      }
+    } catch (_) {}
+  }
+
   @State progress: number = 0;
   @State errorMessage: string = '';
 
   aboutToAppear(): void {
     // 定位权限需要动态申请，且必须在网页发起点位请求之前完成
     this.requestLocationPermissions();
+    this.loadServer();
   }
 
   /**
@@ -83,7 +117,7 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Web({ src: $rawfile(HOME_PAGE), controller: this.controller })
+      Web({ src: this.pageSource, controller: this.controller })
         .width('100%')
         .height('100%')
         // ===== 能力开关 =====
@@ -104,6 +138,7 @@ struct Index {
         // ===== 页面生命周期 =====
         .onPageBegin(() => {
           this.loading = true;
+          this.errorMessage = '';
         })
         .onProgressChange((event) => {
           if (event) {
@@ -121,7 +156,8 @@ struct Index {
           const url: string = event.request.getRequestUrl();
           hilog.error(DOMAIN, TAG, '资源加载失败: %{public}s', url);
           // 只有主文档（.html）失败才算致命：贴图 / 地图 / CDN 离线失败不影响主体功能
-          if (url.indexOf('.html') >= 0) {
+          if (event.request.isMainFrame()) {
+            this.loading = false;
             this.errorMessage = '页面加载失败：' + url;
           }
         })
@@ -143,7 +179,7 @@ struct Index {
         // ===== 摄像头 / 麦克风等权限请求 =====
         .onPermissionRequest((event) => {
           if (event) {
-            event.request.grant(event.request.getAccessibleResource());
+            event.request.deny();
           }
         })
         // ===== 网页 <input type="file"> 的选择器接管 =====
@@ -205,7 +241,7 @@ struct Index {
             .fontColor('#E6EDF3')
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })
-          Text('请确认已执行 npm run harmonyos:sync 生成网页产物')
+          Text('请检查服务地址与网络，或打开连接设置选择离线游客体验')
             .fontSize(12)
             .fontColor('#9FB3C8')
             .textAlign(TextAlign.Center)
@@ -226,6 +262,33 @@ struct Index {
         .height('100%')
         .justifyContent(FlexAlign.Center)
         .backgroundColor('#0E1621')
+      }
+      Column() {
+        Row() {
+          Blank()
+          Button('连接设置').fontSize(12).height(32).onClick(() => { this.connectionOpen = true; })
+        }.width('100%').padding(8)
+        Blank()
+      }.width('100%').height('100%').hitTestBehavior(HitTestMode.Transparent)
+
+      if (this.connectionOpen) {
+        Column({ space: 16 }) {
+          Text('连接用户数据服务').fontSize(22).fontColor('#ffffff')
+          Text('联网模式可注册账号、保存和恢复实验；离线模式可直接体验仿真。')
+            .fontSize(14).fontColor('#b7cbdc')
+          TextInput({ text: this.server, placeholder: 'http://电脑局域网地址:3000' })
+            .onChange((value: string) => { this.server = value; })
+          Text('设备上的 127.0.0.1 指设备本身。通过 USB 端口映射或填写电脑的局域网地址连接。')
+            .fontSize(12).fontColor('#b7cbdc')
+          if (this.connectionMessage.length > 0) {
+            Text(this.connectionMessage).fontColor('#ff8a8a').fontSize(12)
+          }
+          Button('连接并登录').width('100%').onClick(() => { this.connect(); })
+          Button('离线游客体验').width('100%').onClick(() => {
+            this.pageSource = $rawfile(HOME_PAGE); this.connectionOpen = false; this.errorMessage = '';
+          })
+          Button('返回当前页面').width('100%').onClick(() => { this.connectionOpen = false; })
+        }.width('100%').height('100%').padding(28).justifyContent(FlexAlign.Center).backgroundColor('#0E1621')
       }
     }
     .width('100%')

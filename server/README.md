@@ -40,9 +40,9 @@ npm run server
 | GET | `/api/experiments/:id` | 恢复所需的完整记录 |
 | DELETE | `/api/experiments/:id` | 删除当前用户的记录 |
 
-`state` 使用版本 1，只接受 `shared/experiment-state.js` 中定义的参数，不能写入任意 Vue 字段。图像、地图对象、浏览器状态和运行时画布不入库。
+`state` 版本 1 用于网页/ArkWeb，版本 2 用于纯 ArkTS 原生应用，两者只接受 `shared/experiment-state.js` 中定义的参数，不能写入任意 Vue 字段。图像、地图对象、浏览器状态和运行时画布不入库。
 
-本次接入网页端。直接从 file:// 打开的 Electron / ArkWeb 静态页面仍可游客体验；纯 ArkTS 原生工程的 `/api/login` 约定尚未与此 `/api/auth/login` 接口对接。
+网页、ArkWeb 在线模式和原生 ArkTS 共用 `/api/auth` 账号接口。原生实验使用 v2，保留独立双通道波形；不同版本的实验不可直接互相恢复。ArkWeb 本地 rawfile 和 Electron file:// 页面仍可游客体验。
 
 ## 验证
 

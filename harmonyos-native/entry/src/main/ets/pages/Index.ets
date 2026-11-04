@@ -1,10 +1,11 @@
+import { preferences } from '@kit.ArkData';
 import { router } from '@kit.ArkUI';
 import { AuthService, LoginResult } from '../service/AuthService';
 import { Palette } from '../common/ScopeConstants';
 
 /**
  * 登录页：对应网页版 public/login.css + external.html 里的 login-overlay。
- * 后端沿用原项目 server/index.js（Express，端口 3001）。
+ * 对接仓库后端 /api/auth，账号与网页共享。
  */
 @Entry
 @Component
@@ -14,7 +15,42 @@ struct Index {
   @State password: string = '';
   @State busy: boolean = false;
   @State errorText: string = '';
-  @State showServer: boolean = false;
+  @State showServer: boolean = true;
+  @State registering: boolean = false;
+  @State nickname: string = '';
+  @State confirmPassword: string = '';
+
+  async aboutToAppear(): Promise<void> {
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context) {
+        const prefs = await preferences.getPreferences(context, { name: 'connection' });
+        this.server = await prefs.get('server', AuthService.DEFAULT_SERVER) as string;
+      }
+    } catch (_) {}
+  }
+
+  private async rememberServer(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context) {
+      const prefs = await preferences.getPreferences(context, { name: 'connection' });
+      await prefs.put('server', AuthService.normalizeServer(this.server));
+      await prefs.flush();
+    }
+  }
+
+  private async doRegister(): Promise<void> {
+    if (this.busy) return;
+    if (this.password !== this.confirmPassword) { this.errorText = '两次输入的密码不一致'; return; }
+    this.busy = true;
+    try {
+      await AuthService.register(this.server, this.username, this.password, this.nickname);
+      this.registering = false; this.password = ''; this.confirmPassword = '';
+      this.errorText = '注册成功，请登录';
+      try { await this.rememberServer(); } catch (_) {}
+    } catch (error) { this.errorText = (error as Error).message; }
+    finally { this.busy = false; }
+  }
 
   private async doLogin(): Promise<void> {
     if (this.busy) {
@@ -25,6 +61,8 @@ struct Index {
     const res: LoginResult = await AuthService.login(this.server, this.username, this.password);
     this.busy = false;
     if (res.ok) {
+      try { await this.rememberServer(); } catch (_) {}
+      this.password = '';
       AppStorage.setOrCreate('displayName', res.displayName);
       AppStorage.setOrCreate('role', res.role);
       AppStorage.setOrCreate('token', res.token);
@@ -39,7 +77,7 @@ struct Index {
     AppStorage.setOrCreate('displayName', '访客');
     AppStorage.setOrCreate('role', 'guest');
     AppStorage.setOrCreate('token', '');
-    AppStorage.setOrCreate('server', AuthService.normalizeServer(this.server));
+    AppStorage.setOrCreate('server', AuthService.DEFAULT_SERVER);
     router.pushUrl({ url: 'pages/ScopePage' });
   }
 
@@ -53,6 +91,7 @@ struct Index {
   }
 
   build() {
+    Scroll() {
     Column() {
       Column() {
         Text('示波器模拟器')
@@ -66,11 +105,11 @@ struct Index {
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
-      .padding({ top: 56, bottom: 28 })
+      .padding({ top: 24, bottom: 20 })
 
       Column() {
         this.fieldLabel('用户名')
-        TextInput({ text: this.username, placeholder: '至少 3 个字符' })
+        TextInput({ text: this.username, placeholder: '3–20 位中文、字母、数字、_ 或 -' })
           .width('100%')
           .height(44)
           .backgroundColor('#152430')
@@ -81,7 +120,7 @@ struct Index {
           })
 
         this.fieldLabel('密码')
-        TextInput({ text: this.password, placeholder: '至少 6 个字符' })
+        TextInput({ text: this.password, placeholder: '8–128 位' })
           .type(InputType.Password)
           .width('100%')
           .height(44)
@@ -92,6 +131,14 @@ struct Index {
             this.password = value;
           })
 
+        if (this.registering) {
+          this.fieldLabel('昵称（可选）')
+          TextInput({ text: this.nickname, placeholder: '最多 40 位' })
+            .maxLength(40).onChange((value: string) => { this.nickname = value; })
+          this.fieldLabel('确认密码')
+          TextInput({ text: this.confirmPassword, placeholder: '再次输入密码' })
+            .type(InputType.Password).onChange((value: string) => { this.confirmPassword = value; })
+        }
         Row() {
           Text('服务器地址')
             .fontSize(12)
@@ -108,7 +155,7 @@ struct Index {
         .margin({ top: 12, bottom: 4 })
 
         if (this.showServer) {
-          TextInput({ text: this.server, placeholder: 'http://10.0.2.2:3001' })
+          TextInput({ text: this.server, placeholder: 'http://电脑局域网地址:3000' })
             .width('100%')
             .height(40)
             .backgroundColor('#152430')
@@ -127,7 +174,7 @@ struct Index {
             .margin({ top: 12 })
         }
 
-        Button(this.busy ? '登录中…' : '登 录')
+        Button(this.busy ? '正在处理…' : (this.registering ? '注 册' : '登 录'))
           .width('100%')
           .height(46)
           .margin({ top: 24 })
@@ -136,8 +183,13 @@ struct Index {
           .fontSize(16)
           .enabled(!this.busy)
           .onClick(() => {
-            this.doLogin();
+            if (this.registering) this.doRegister();
+            else this.doLogin();
           })
+
+        Button(this.registering ? '已有账号，返回登录' : '没有账号，注册')
+          .width('100%').margin({ top: 12 }).enabled(!this.busy)
+          .onClick(() => { this.registering = !this.registering; this.errorText = ''; })
 
         Button('游客模式进入')
           .width('100%')
@@ -147,6 +199,7 @@ struct Index {
           .fontColor(Palette.TEXT_DIM)
           .fontSize(14)
           .border({ width: 1, color: '#25323d' })
+          .enabled(!this.busy)
           .onClick(() => {
             this.enterGuest();
           })
@@ -158,15 +211,15 @@ struct Index {
 
       Blank()
 
-      Text('波形由端上本地生成，无需后端推送；\n后端仅用于账号登录与操作日志。')
+      Text('波形由端上本地生成，无需后端推送；\n联网后可保存并恢复个人实验。')
         .fontSize(11)
         .fontColor(Palette.TEXT_DIM)
         .textAlign(TextAlign.Center)
         .margin({ bottom: 24 })
     }
     .width('100%')
-    .height('100%')
     .padding({ left: 20, right: 20 })
     .backgroundColor('#080f14')
+    }.width('100%').height('100%').backgroundColor('#080f14')
   }
 }

@@ -70,6 +70,7 @@ export default {
     async restoreExperiment(id) {
       return this.recordsAction(async () => {
         const { item } = await api('/experiments/' + id);
+        if (item.state.version !== 1) throw new Error('这是鸿蒙原生实验，请在原生客户端恢复');
         const { parameters } = validateState(item.state);
         // Apply the mode first, then the saved settings (mode changes reset some parameters).
         this.setExpStep(parameters.expStep);

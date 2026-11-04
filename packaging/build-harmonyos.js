@@ -24,7 +24,8 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const PROJECT = path.join(ROOT, 'harmonyos');
+const native = process.argv.includes('--native');
+const PROJECT = path.join(ROOT, native ? 'harmonyos-native' : 'harmonyos');
 const WORKSPACE = path.resolve(ROOT, '..');
 
 const buildMode = process.argv[2] === 'release' ? 'release' : 'debug';
@@ -67,7 +68,7 @@ function main() {
   if (!fs.existsSync(PROJECT)) fail('未找到 harmonyos/ 工程目录');
 
   const www = path.join(PROJECT, 'entry', 'src', 'main', 'resources', 'rawfile', 'www');
-  if (!fs.existsSync(path.join(www, 'index.html'))) {
+  if (!native && !fs.existsSync(path.join(www, 'index.html'))) {
     fail('rawfile/www 里没有网页产物，请先执行 npm run build:harmonyos');
   }
 

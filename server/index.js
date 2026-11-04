@@ -116,7 +116,7 @@ function createServer(options = {}) {
           return json(res, 200, { ok: true });
         }
         if (req.method === 'GET' && route === '/api/experiments') {
-          const items = db.prepare('SELECT id,title,notes,created_at AS createdAt FROM experiments WHERE user_id=? ORDER BY created_at DESC, rowid DESC').all(user.id);
+          const items = db.prepare("SELECT id,title,notes,created_at AS createdAt,json_extract(state,'$.version') AS stateVersion FROM experiments WHERE user_id=? ORDER BY created_at DESC, rowid DESC").all(user.id);
           return json(res, 200, { items });
         }
         if (req.method === 'POST' && route === '/api/experiments') {

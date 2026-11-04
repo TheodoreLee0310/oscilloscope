@@ -33,7 +33,7 @@
 - **时基**：1~500 ms/div 连续可调
 - **屏幕读数（OSD）**：CH1/CH2 波形名与频率、时基、频率比或 Vpp、触发状态，带半透明底板
 - **绘制细节**：主/次栅格、中心十字轴、径向渐变屏幕底色、`shadowBlur` 荧光辉光、从右向左的扫描方向
-- **登录**：`@kit.NetworkKit` 的 `http` 调用后端 `/api/login`，失败可"游客模式进入"
+- **登录**：`@kit.NetworkKit` 的 `http` 调用后端 `/api/auth/login`，失败可"游客模式进入"
 
 ## 三、目录
 
@@ -71,10 +71,10 @@ node "/path/to/DevEco Studio/tools/hvigor/hvigor/bin/hvigor.js" \
   --mode module -p product=default assembleHap --no-daemon
 ```
 
-产物：`entry/build/default/outputs/default/entry-default-unsigned.hap`，安装：
+产物：`entry/build/default/outputs/default/entry-default-unsigned.hap`。以下安装命令需先配置签名并使用签名产物：
 
 ```bash
-hdc install -r entry/build/default/outputs/default/entry-default-unsigned.hap
+hdc install -r <配置签名后生成的HAP路径>
 hdc shell aa start -a EntryAbility -b com.example.oscilloscope
 ```
 
@@ -82,8 +82,8 @@ hdc shell aa start -a EntryAbility -b com.example.oscilloscope
 
 ## 五、已验证
 
-- `hvigor assembleHap` 构建通过，零 ArkTS 报错，产物约 300 KB
-- 安装并运行于 DevEco 自带模拟器（HarmonyOS 7.0.0 / API 26，x86_64）：登录页 → 游客模式 → 双踪/叠加/李萨如三模式均正常
+- 当前新增账号/实验功能已通过 DevEco SDK 编译，产物约 387 KiB；有 API 废弃提示，无编译错误。
+- 以下旧版本模拟器记录不代表本次新增功能验收；本轮没有连接设备，新增界面与网络仍需实机验证。
 - 模型层（`WaveMath` / `ScopeEngine` / `ScopeTypes`）用 SDK 自带 `tsc --strict` 单独编译后跑过 23 条断言：
   6 种波形幅值、`simplifyRatio(50,100)=[1,2]`、`findTriggerPhase` 过零与 1 V 上升沿相位、
   触发锁定时窗口相位误差 0.000000000、正弦 Vpp=4.000/Vrms=1.413、叠加 Vpp=8.000、李萨如首尾闭合
@@ -91,5 +91,9 @@ hdc shell aa start -a EntryAbility -b com.example.oscilloscope
 ## 六、已知限制
 
 - 没有 Three.js 的三维电子枪与 CRT 外壳（这是 `harmonyos/` 路线保留的部分）
-- 本仓库不包含登录后端；HTTP 登录需要自行提供兼容 `/api/login` 的服务。默认地址为 `http://10.0.2.2:3001`（模拟器访问宿主机），真机需在登录页改为可访问的服务器地址；也可使用游客模式。
+- 仓库已提供 `server/` 后端，可注册、登录、保存、恢复、删除原生实验；连接方式见 [INSTALL.md](INSTALL.md)。默认 `http://127.0.0.1:3000` 需要设备到电脑的端口映射，不能直接视为电脑地址。
 - 未做余辉拖尾（残影）动画
+
+## 账号与实验记录
+
+直接运行根目录 `npm run harmonyos:native:build` 可自动定位本机 DevEco 并构建。注册、登录、保存和恢复使用仓库后端；服务器地址会记忆，密码不会写入端上持久化存储。原生参数使用 v2，网页使用 v1，暂不相互恢复。安装步骤见 [INSTALL.md](INSTALL.md)。
