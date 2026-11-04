@@ -1,7 +1,8 @@
 import { AuthService } from '../service/AuthService';
 import { ApiError } from '../service/ApiService';
 import { ExperimentPage, ExperimentService, ExperimentSummary, ImportOutcome } from '../service/ExperimentService';
-import { DraftRecord, DraftService } from '../service/DraftService';
+import { DraftRecord, DraftService, isValidDraftSetup } from '../service/DraftService';
+import { LocalRecord, RecordsService, RemoveResult } from '../service/RecordsService';
 import { SessionService } from '../service/SessionService';
 import { common } from '@kit.AbilityKit';
 import { ImportItem, TransferSummary, classifyImport, containsSensitiveField } from '../service/ExperimentTransfer';
@@ -36,6 +37,7 @@ struct ScopePage {
   /** 导出文件读写 + 待确认的导入条目（两步式导入用） */
   private exportFiles: ExportFiles | null = null;
   private pendingImportValid: ImportItem[] = [];
+  private recordsService: RecordsService | null = null;
 
   @State recordsOpen: boolean = false;
   @State recordBusy: boolean = false;
@@ -60,6 +62,19 @@ struct ScopePage {
   @State importPath: string = '';
   @State importSummary: string = '';
   @State transferMessage: string = '';
+  /** 本机离线记录（与服务器"我的实验"分开，不自动上传） */
+  @State localOpen: boolean = false;
+  @State localRecords: LocalRecord[] = [];
+  @State localMessage: string = '';
+  @State localTitle: string = '';
+  @State localNotes: string = '';
+  @State localEditingId: string = '';
+  @State localEditTitle: string = '';
+  @State localEditNotes: string = '';
+  @State localPendingDelete: string = '';
+  /** 游客记录迁入账号的确认提示 / 无法确认归属的旧数据提示 */
+  @State guestPrompt: string = '';
+  @State orphanNotice: string = '';
   @State userName: string = '访客';
   @State running: boolean = true;
   @State displayMode: string = 'dual';
@@ -112,20 +127,25 @@ struct ScopePage {
 
   /* ------------------------------------------------------------ 本机草稿 */
 
-  /** 草稿目录来自应用沙箱 filesDir；与服务器数据完全分离 */
+  /** 草稿目录来自应用沙箱 filesDir；与服务器数据、本机记录分开存储 */
   private initDrafts(): void {
     try {
       const context = this.getUIContext().getHostContext();
       if (context === undefined) {
         return;
       }
-      this.draftService = new DraftService((context as common.UIAbilityContext).filesDir);
-      this.exportFiles = new ExportFiles((context as common.UIAbilityContext).filesDir);
+      const filesDir: string = (context as common.UIAbilityContext).filesDir;
+      this.draftService = new DraftService(filesDir);
+      this.recordsService = new RecordsService(filesDir);
+      this.exportFiles = new ExportFiles(filesDir);
       const draft: DraftRecord | null = this.draftService.load(this.draftServer(), this.draftUserId());
       if (draft !== null) {
         this.draftFound = true;
         this.draftSavedAtText = new Date(draft.savedAtMs).toLocaleString();
       }
+      this.loadLocalRecords();
+      this.refreshGuestPrompt();
+      this.refreshOrphanNotice();
     } catch (_) {
       this.draftService = null;
     }
@@ -167,17 +187,8 @@ struct ScopePage {
     }
   }
 
-  private applyDraft(): void {
-    if (this.draftService === null || this.draftService === undefined) {
-      return;
-    }
-    const draft: DraftRecord | null = this.draftService.load(this.draftServer(), this.draftUserId());
-    this.draftFound = false;
-    if (draft === null) {
-      this.draftMessage = '草稿已损坏，未恢复（坏文件已隔离）';
-      return;
-    }
-    const setup = draft.setup;
+  /** 把一份参数快照应用到界面（草稿恢复与本机记录恢复共用） */
+  private applySetup(setup: ScopeSetup): void {
     this.displayMode = setup.displayMode; this.timeDivMs = setup.timeDiv * 1000;
     this.trigEnabled = setup.triggerEnabled; this.trigLevel = setup.triggerLevel;
     this.trigRising = setup.triggerRising;
@@ -190,6 +201,19 @@ struct ScopePage {
     this.phaseDeg = setup.ch2.phaseDeg;
     this.lastDraftSignature = this.draftSignature();
     this.resetRun(); this.frame();
+  }
+
+  private applyDraft(): void {
+    if (this.draftService === null || this.draftService === undefined) {
+      return;
+    }
+    const draft: DraftRecord | null = this.draftService.load(this.draftServer(), this.draftUserId());
+    this.draftFound = false;
+    if (draft === null) {
+      this.draftMessage = '草稿已损坏，未恢复（坏文件已隔离）';
+      return;
+    }
+    this.applySetup(draft.setup);
     this.draftMessage = '已恢复本机草稿（' + this.draftSavedAtText + '）';
   }
 
@@ -201,6 +225,168 @@ struct ScopePage {
     // 以当前参数作为新的基线，避免刚删完就立刻把默认值又存成草稿
     this.lastDraftSignature = this.draftSignature();
     this.draftMessage = '已删除本机草稿';
+  }
+
+  /* ------------------------------------------------------------ 本机离线记录 */
+
+  private loadLocalRecords(): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      this.localRecords = [];
+      return;
+    }
+    this.localRecords = this.recordsService.list(this.draftServer(), this.draftUserId());
+    this.localMessage = this.localRecords.length === 0
+      ? '本机还没有离线记录'
+      : '本机共 ' + this.localRecords.length.toString() + ' 条（不会自动上传）';
+  }
+
+  /** 同步状态文案：本轮只有「仅保存在本机」，其余为同步轮预留 */
+  private syncLabel(state: string): string {
+    if (state === 'synced') {
+      return '已同步';
+    }
+    if (state === 'pending') {
+      return '待同步';
+    }
+    if (state === 'deleted') {
+      return '待删除';
+    }
+    return '仅保存在本机';
+  }
+
+  private saveLocalRecord(): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      this.localMessage = '本机存储不可用';
+      return;
+    }
+    const setup: ScopeSetup = this.buildSetup();
+    setup.runTimeSec = 0;
+    const record: LocalRecord | null = this.recordsService.create(this.draftServer(), this.draftUserId(),
+      this.localTitle, this.localNotes, JSON.stringify(setup));
+    if (record === null) {
+      this.localMessage = '保存失败：标题需为 1–80 位，备注不超过 2000 位';
+      return;
+    }
+    this.localTitle = '';
+    this.localNotes = '';
+    this.loadLocalRecords();
+    this.localMessage = '已保存到本机：' + record.title;
+  }
+
+  private startLocalEdit(record: LocalRecord): void {
+    this.localEditingId = record.clientId;
+    this.localEditTitle = record.title;
+    this.localEditNotes = record.notes;
+    this.localPendingDelete = '';
+  }
+
+  private cancelLocalEdit(): void {
+    this.localEditingId = '';
+    this.localEditTitle = '';
+    this.localEditNotes = '';
+  }
+
+  private saveLocalEdit(record: LocalRecord): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      return;
+    }
+    // 只改文案时沿用原参数快照，避免把当前画布参数误写进旧记录
+    const ok: boolean = this.recordsService.update(this.draftServer(), this.draftUserId(),
+      record.clientId, this.localEditTitle, this.localEditNotes, record.setupJson);
+    if (!ok) {
+      this.localMessage = '修改失败：标题需为 1–80 位，备注不超过 2000 位';
+      return;
+    }
+    this.cancelLocalEdit();
+    this.loadLocalRecords();
+    this.localMessage = '已修改本机记录';
+  }
+
+  private deleteLocalRecord(clientId: string): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      return;
+    }
+    const result: RemoveResult = this.recordsService.remove(this.draftServer(), this.draftUserId(), clientId);
+    this.localPendingDelete = '';
+    this.loadLocalRecords();
+    if (!result.ok) {
+      this.localMessage = result.kind === 'missing' ? '记录已不存在（可能已删除过）' : '删除失败，请重试';
+      return;
+    }
+    this.localMessage = result.kind === 'tombstoned'
+      ? '已标记删除（保留墓碑，等待同步）' : '已从本机删除';
+  }
+
+  private restoreLocalRecord(record: LocalRecord): void {
+    try {
+      const setup: ScopeSetup = JSON.parse(record.setupJson) as ScopeSetup;
+      if (!isValidDraftSetup(setup)) {
+        this.localMessage = '记录参数已损坏，未恢复';
+        return;
+      }
+      this.applySetup(setup);
+      this.localMessage = '已恢复：' + record.title;
+    } catch (_) {
+      this.localMessage = '记录参数已损坏，未恢复';
+    }
+  }
+
+  /** 登录账号后发现游客记录：只提示，必须用户确认才迁入 */
+  private refreshGuestPrompt(): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      return;
+    }
+    if (this.draftUserId() <= 0) {
+      this.guestPrompt = '';
+      return;
+    }
+    const guest: number = this.recordsService.guestCount(this.draftServer());
+    this.guestPrompt = guest > 0
+      ? ('发现游客期的 ' + guest.toString() + ' 条本机记录。迁入当前账号会清空游客分区，是否继续？')
+      : '';
+  }
+
+  private migrateGuestRecords(): void {
+    if (this.recordsService === null || this.recordsService === undefined) {
+      return;
+    }
+    const migrated: number = this.recordsService.migrateGuest(this.draftServer(), this.draftUserId());
+    this.guestPrompt = '';
+    this.loadLocalRecords();
+    this.localMessage = migrated > 0
+      ? ('已迁入 ' + migrated.toString() + ' 条游客记录') : '没有可迁入的记录';
+  }
+
+  /** 选择"暂不迁入"：游客记录原样保留，不做任何改动 */
+  private dismissGuestPrompt(): void {
+    this.guestPrompt = '';
+  }
+
+  /** 旧版字符键数据可能碰撞，无法确认归属：只提示，不自动迁入 */
+  private refreshOrphanNotice(): void {
+    const found: string[] = [];
+    if (this.draftService !== null && this.draftService !== undefined &&
+      this.draftService.hasLegacy(this.draftServer(), this.draftUserId())) {
+      found.push('旧版草稿');
+    }
+    if (this.recordsService !== null && this.recordsService !== undefined &&
+      this.recordsService.hasLegacy(this.draftServer(), this.draftUserId())) {
+      found.push('旧版本机记录');
+    }
+    this.orphanNotice = found.length > 0
+      ? ('发现 ' + found.join('、') + '：旧分区键可能与其他账号碰撞，无法确认归属，已原样保留且不会自动迁入。')
+      : '';
+  }
+
+  private discardOrphan(): void {
+    if (this.draftService !== null && this.draftService !== undefined) {
+      this.draftService.discardLegacy(this.draftServer(), this.draftUserId());
+    }
+    if (this.recordsService !== null && this.recordsService !== undefined) {
+      this.recordsService.discardLegacy(this.draftServer(), this.draftUserId());
+    }
+    this.orphanNotice = '';
+    this.localMessage = '已删除旧版残留数据';
   }
 
   private frame(): void {
@@ -491,6 +677,109 @@ struct ScopePage {
       .padding({ left: 12, right: 12, top: 8, bottom: 8 })
       .backgroundColor('#12222c')
     }
+  }
+
+  /** 本机离线记录面板：与服务器"我的实验"完全分开，不自动上传 */
+  @Builder
+  localRecordsPanel() {
+    Column({ space: 8 }) {
+      Button(this.localOpen ? '收起本机记录' : '本机离线记录')
+        .width('100%')
+        .backgroundColor('#1d3a4a')
+        .fontColor('#dff1f7')
+        .onClick(() => {
+          this.localOpen = !this.localOpen;
+          if (this.localOpen) {
+            this.loadLocalRecords();
+            this.refreshGuestPrompt();
+            this.refreshOrphanNotice();
+          }
+        })
+      if (this.localOpen) {
+        if (this.orphanNotice.length > 0) {
+          Column({ space: 6 }) {
+            Text(this.orphanNotice).fontColor('#ffb74d').fontSize(11).width('100%')
+            Button('删除旧版残留').height(30).fontSize(11)
+              .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+              .border({ width: 1, color: '#25323d' })
+              .onClick(() => { this.discardOrphan(); })
+          }.width('100%').padding(8).backgroundColor('#211a12').borderRadius(8)
+        }
+        if (this.guestPrompt.length > 0) {
+          Column({ space: 6 }) {
+            Text(this.guestPrompt).fontColor('#ffe0a3').fontSize(11).width('100%')
+            Row({ space: 8 }) {
+              Button('迁入当前账号').height(30).fontSize(11)
+                .onClick(() => { this.migrateGuestRecords(); })
+              Button('暂不迁入').height(30).fontSize(11)
+                .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                .border({ width: 1, color: '#25323d' })
+                .onClick(() => { this.dismissGuestPrompt(); })
+            }
+          }.width('100%').padding(8).backgroundColor('#2a2416').borderRadius(8)
+        }
+        Text('这些记录只存在本机，联网也不会自动上传；同步功能在下一轮接入。')
+          .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+        TextInput({ text: this.localTitle, placeholder: '本机记录标题（必填）' })
+          .maxLength(80).width('100%')
+          .onChange((value: string) => { this.localTitle = value; })
+        TextArea({ text: this.localNotes, placeholder: '备注（可选）' })
+          .maxLength(2000).height(56).width('100%')
+          .onChange((value: string) => { this.localNotes = value; })
+        Button('存为本机记录').width('100%').onClick(() => { this.saveLocalRecord(); })
+        Text(this.localMessage).fontColor('#d5e6dc').fontSize(12).width('100%')
+        ForEach(this.localRecords, (record: LocalRecord) => {
+          Column({ space: 6 }) {
+            if (this.localEditingId === record.clientId) {
+              TextInput({ text: this.localEditTitle, placeholder: '标题' })
+                .maxLength(80).width('100%')
+                .onChange((value: string) => { this.localEditTitle = value; })
+              TextArea({ text: this.localEditNotes, placeholder: '备注' })
+                .maxLength(2000).height(56).width('100%')
+                .onChange((value: string) => { this.localEditNotes = value; })
+              Row({ space: 8 }) {
+                Button('保存修改').onClick(() => { this.saveLocalEdit(record); })
+                Button('取消')
+                  .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                  .border({ width: 1, color: '#25323d' })
+                  .onClick(() => { this.cancelLocalEdit(); })
+              }
+            } else {
+              Row({ space: 6 }) {
+                Text(record.title).fontColor('#ffffff').fontSize(13).layoutWeight(1)
+                Text(this.syncLabel(record.syncState)).fontColor('#8fd3ff').fontSize(10)
+              }.width('100%')
+              Text('修订 ' + record.rev.toString() + ' · ' +
+                new Date(record.updatedAtMs).toLocaleString())
+                .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+              if (record.notes.length > 0) {
+                Text(record.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
+              }
+              Row({ space: 8 }) {
+                Button('恢复参数').onClick(() => { this.restoreLocalRecord(record); })
+                Button('编辑')
+                  .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                  .border({ width: 1, color: '#25323d' })
+                  .onClick(() => { this.startLocalEdit(record); })
+                Button(this.localPendingDelete === record.clientId ? '确认删除' : '删除')
+                  .onClick(() => {
+                    if (this.localPendingDelete === record.clientId) {
+                      this.deleteLocalRecord(record.clientId);
+                    } else {
+                      this.localPendingDelete = record.clientId;
+                    }
+                  })
+                if (this.localPendingDelete === record.clientId) {
+                  Button('取消')
+                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                    .onClick(() => { this.localPendingDelete = ''; })
+                }
+              }
+            }
+          }.width('100%').padding(10).backgroundColor(Palette.PANEL_ITEM).borderRadius(8)
+        }, (record: LocalRecord) => record.clientId)
+      }
+    }.width('100%').padding({ bottom: 12 })
   }
 
   @Builder
@@ -981,6 +1270,7 @@ struct ScopePage {
       Scroll() {
         Column() {
           this.recordsPanel()
+          this.localRecordsPanel()
           this.modeRow()
           this.ch1Panel()
           this.ch2Panel()

@@ -1,31 +1,53 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 
 /**
- * 本地 JSON 存储（P0）
+ * 本地 JSON 存储（v2）
  *
- * 为什么不直接上关系型数据库：当前数据量（≤500 条实验 + 1 份草稿）用 JSON 文件
- * 完全够用，且便于人工排查；接口按「文档存储」抽象，后续换 RDB 只替换本类实现。
- *
- * 三条硬性要求（来自规划）：
- *   1. 原子替换：先写 .tmp 再 rename，避免断电/崩溃留下半个文件；
- *   2. 格式版本：外层信封带 format/version，未来结构升级可识别；
- *   3. 损坏恢复：解析失败时把坏文件改名隔离（.bad-<时间戳>），返回 null 而不是崩溃。
+ * 与 v1 的关键差别（按评审意见）：
+ *   - 信封除了哈希分区键，还**保存并核对**「规范化服务器地址 + userId + 数据名」。
+ *     只比哈希不够：哈希相同只能说明可能同源，不能证明归属。
+ *   - 归属核对失败时**不删除、不改名、不迁入**，返回 FOREIGN 让上层提示用户处理；
+ *     旧版本信封（缺少归属字段）返回 UNSUPPORTED，同样保留原文件。
+ *     只有"确实是坏数据"（无法解析 / 格式标记不对）才会被隔离改名。
+ *   - 同一分区下用 name 区分不同数据（draft / records），草稿与正式记录互不覆盖。
  */
 
-/** 存储信封：业务数据以字符串形式放在 payload 里，便于版本演进与容错 */
 export class StoreEnvelope {
   format: string = 'sbq-local-store';
-  version: number = 1;
+  version: number = 2;
+  /** 数据名：draft / records */
+  name: string = '';
+  /** 规范化服务器地址（核对归属用） */
+  server: string = '';
+  userId: number = 0;
+  /** 哈希分区键（只用于文件名） */
   profile: string = '';
   updatedAtMs: number = 0;
   payload: string = '';
 }
 
 /**
- * 32 位 FNV-1a。
- * 用途只是**分区命名**（避免字符替换带来的歧义与碰撞），不是安全哈希，
- * 也不参与任何凭据校验。
+ * 读取状态。
+ * 用类常量而不是 enum：电脑侧的逻辑测试装置走 strip-only 剥类型，不支持 enum。
  */
+export class StoreStatus {
+  /** 读取成功且归属校验通过 */
+  static readonly OK: number = 0;
+  /** 文件不存在 */
+  static readonly MISSING: number = 1;
+  /** 归属校验不通过（账号/服务器/数据名不一致），文件已保留 */
+  static readonly FOREIGN: number = 2;
+  /** 内容损坏，已隔离为 .bad-<ts> */
+  static readonly CORRUPT: number = 3;
+  /** 旧版本信封，缺少归属字段，文件已保留 */
+  static readonly UNSUPPORTED: number = 4;
+}
+
+export class StoreReadResult {
+  status: number = StoreStatus.MISSING;
+  payload: string = '';
+}
+
 function fnv1a(input: string, seed: number): string {
   let hash: number = seed >>> 0;
   for (let i = 0; i < input.length; i++) {
@@ -42,7 +64,6 @@ export class LocalStore {
     this.baseDir = filesDir + '/sbq-store';
   }
 
-  /** 规范化服务器地址：去空白、转小写、去掉结尾斜杠，保证同一服务器得到同一分区 */
   static normalizeServer(server: string): string {
     let value: string = server.trim().toLowerCase();
     while (value.endsWith('/')) {
@@ -51,19 +72,13 @@ export class LocalStore {
     return value;
   }
 
-  /**
-   * 账号隔离键：对「规范化服务器地址 + userId」取双段哈希（16 位十六进制）。
-   *
-   * 为什么不用字符替换：`http://a-b` 与 `http://a_b` 替换后会得到同一个名字，
-   * 不同服务器/用户可能撞到同一分区。哈希把整串压成定长，并用两段不同种子
-   * 降低碰撞概率；读文件时还会用信封里的 profile 字段再校验一次。
-   */
+  /** 哈希分区键：只用于文件名，归属仍靠信封字段核对 */
   static profileKey(server: string, userId: number): string {
     const material: string = LocalStore.normalizeServer(server) + '#' + userId.toString();
     return 'p' + fnv1a(material, 0x811c9dc5) + fnv1a(material, 0x1b873593);
   }
 
-  /** 上一版的字符串替换键，仅用于把旧草稿迁移过来，不再用于新写入 */
+  /** 上一版用字符替换做的键：可能碰撞，只用于"发现旧数据"，绝不用于自动迁入 */
   static legacyProfileKey(server: string, userId: number): string {
     const safe: string = server.replace(/[^a-zA-Z0-9]/g, '_');
     if (userId > 0) {
@@ -72,8 +87,12 @@ export class LocalStore {
     return safe + '_guest';
   }
 
-  private filePath(profile: string): string {
-    return this.baseDir + '/' + profile + '.json';
+  private pathOf(server: string, userId: number, name: string): string {
+    return this.baseDir + '/' + LocalStore.profileKey(server, userId) + '.' + name + '.json';
+  }
+
+  private legacyPathOf(server: string, userId: number, name: string): string {
+    return this.baseDir + '/' + LocalStore.legacyProfileKey(server, userId) + '.' + name + '.json';
   }
 
   private ensureDir(): void {
@@ -82,7 +101,7 @@ export class LocalStore {
         fs.mkdirSync(this.baseDir, true);
       }
     } catch (_) {
-      // 目录已存在或并发创建，忽略
+      // 已存在或并发创建，忽略
     }
   }
 
@@ -96,66 +115,110 @@ export class LocalStore {
     }
   }
 
-  /** 读取业务数据；文件不存在 / 版本不认识 / 已损坏 都返回 null */
-  read(profile: string): string | null {
-    const target: string = this.filePath(profile);
+  /**
+   * 读取并核对归属。
+   * 只有"坏了"才隔离；"不是你的"一律原样保留。
+   */
+  read(server: string, userId: number, name: string): StoreReadResult {
+    const result: StoreReadResult = new StoreReadResult();
+    const target: string = this.pathOf(server, userId, name);
     try {
       if (!fs.accessSync(target)) {
-        return null;
+        result.status = StoreStatus.MISSING;
+        return result;
       }
       const text: string = fs.readTextSync(target);
-      if (text.length === 0) {
-        return null;
+      let envelope: StoreEnvelope | null = null;
+      try {
+        envelope = JSON.parse(text) as StoreEnvelope;
+      } catch (_) {
+        envelope = null;
       }
-      const envelope: StoreEnvelope = JSON.parse(text) as StoreEnvelope;
       if (envelope === null || envelope.format !== 'sbq-local-store') {
         this.quarantine(target);
-        return null;
+        result.status = StoreStatus.CORRUPT;
+        return result;
       }
-      // 二次校验：文件内容声明的 profile 必须与请求的分区一致，
-      // 防止文件被复制/改名后串到别人的分区里
-      if (envelope.profile !== profile) {
-        this.quarantine(target);
-        return null;
+      // 旧版信封没有归属字段：保留文件，交给上层提示，不猜测归属
+      if (envelope.version !== 2 || envelope.server === undefined || envelope.server === '') {
+        result.status = StoreStatus.UNSUPPORTED;
+        return result;
       }
-      if (envelope.version !== 1) {
-        // 更高版本写给更高版本的应用用，这里不猜、不覆盖
-        return null;
+      const expectedProfile: string = LocalStore.profileKey(server, userId);
+      const sameServer: boolean = envelope.server === LocalStore.normalizeServer(server);
+      const sameUser: boolean = envelope.userId === userId;
+      const sameName: boolean = envelope.name === name;
+      const sameProfile: boolean = envelope.profile === expectedProfile;
+      if (!sameServer || !sameUser || !sameName || !sameProfile) {
+        // 归属不符：可能是被复制/改名过来的别人的数据，保留原文件
+        result.status = StoreStatus.FOREIGN;
+        return result;
       }
-      return envelope.payload;
+      result.status = StoreStatus.OK;
+      result.payload = envelope.payload;
+      return result;
     } catch (_) {
       this.quarantine(target);
-      return null;
+      result.status = StoreStatus.CORRUPT;
+      return result;
     }
   }
 
-  /** 原子写入：写临时文件 → rename 覆盖 */
-  write(profile: string, payload: string): void {
-    this.ensureDir();
-    const target: string = this.filePath(profile);
-    const temp: string = target + '.tmp';
-    const envelope: StoreEnvelope = new StoreEnvelope();
-    envelope.profile = profile;
-    envelope.updatedAtMs = Date.now();
-    envelope.payload = payload;
-    const text: string = JSON.stringify(envelope);
-    const file = fs.openSync(temp, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
+  write(server: string, userId: number, name: string, payload: string): boolean {
     try {
-      fs.writeSync(file.fd, text);
-    } finally {
-      fs.closeSync(file);
+      this.ensureDir();
+      const target: string = this.pathOf(server, userId, name);
+      const temp: string = target + '.tmp';
+      const envelope: StoreEnvelope = new StoreEnvelope();
+      envelope.name = name;
+      envelope.server = LocalStore.normalizeServer(server);
+      envelope.userId = userId;
+      envelope.profile = LocalStore.profileKey(server, userId);
+      envelope.updatedAtMs = Date.now();
+      envelope.payload = payload;
+      const text: string = JSON.stringify(envelope);
+      const file = fs.openSync(temp, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
+      try {
+        fs.writeSync(file.fd, text);
+      } finally {
+        fs.closeSync(file);
+      }
+      fs.renameSync(temp, target);
+      return true;
+    } catch (_) {
+      return false;
     }
-    fs.renameSync(temp, target);
   }
 
-  remove(profile: string): void {
-    const target: string = this.filePath(profile);
+  remove(server: string, userId: number, name: string): void {
     try {
+      const target: string = this.pathOf(server, userId, name);
       if (fs.accessSync(target)) {
         fs.unlinkSync(target);
       }
     } catch (_) {
       // 删除失败不影响调用方
+    }
+  }
+
+  /** 是否存在上一版字符键留下的同类型数据（可能碰撞，需用户显式处理） */
+  hasLegacy(server: string, userId: number, name: string): boolean {
+    try {
+      return fs.accessSync(this.legacyPathOf(server, userId, name));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 明确要求时才删除旧版残留（绝不自动迁入） */
+  removeLegacy(server: string, userId: number, name: string): void {
+    try {
+      const target: string = this.legacyPathOf(server, userId, name);
+      if (fs.accessSync(target)) {
+        fs.unlinkSync(target);
+      }
+    } catch (_) {
+      // 忽略
     }
   }
 }
