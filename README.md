@@ -107,6 +107,18 @@ npm run build:harmonyos      # 1. 构建并同步 Web 产物到 rawfile
 > Electron 桌面壳（`electron-main.js`）无法在鸿蒙上运行，这是平台定位决定的；
 > 鸿蒙端走的是「同一份 Web 产物 + ArkWeb 容器」的路线。
 
+### 两条鸿蒙路线
+
+仓库里有两个互相补充、而不是互相替代的鸿蒙工程：
+
+| 目录 | 路线 | 适用场合 |
+| --- | --- | --- |
+| [`harmonyos/`](harmonyos/README.md) | ArkWeb 容器 + ArkTS 外壳，100% 复用 Web 产物 | 要完整的三维 CRT、VR 寻波、地图与导览；演示与验收「功能完整」 |
+| [`harmonyos-native/`](harmonyos-native/README.md) | **纯 ArkTS/ArkUI 原生**：`Canvas` 绘制 + 自研采样/触发引擎 | 要「原生鸿蒙开发」、轻量高性能、便于二次开发；HAP 约 300 KB |
+
+`harmonyos-native/` 把采样、触发、栅格、辉光与 OSD 全部用 `.ets` 重写，不加载任何网页；
+两套实现共用同一套波形数学（采样点、触发相位、时基换算），波形细节一致。
+
 ## 页面说明
 
 | 页面 | 模板 | 产物 | 说明 |

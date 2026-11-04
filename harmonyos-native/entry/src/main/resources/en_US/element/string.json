@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Oscilloscope main module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Oscilloscope Simulator"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Oscilloscope"
+    },
+    {
+      "name": "internet_reason",
+      "value": "Used to reach the oscilloscope account service for sign-in"
+    }
+  ]
+}

@@ -64,3 +64,11 @@ dist_electron/
 # 构建工具生成的文件
 .webpack/
 .parcel-cache/
+
+# 鸿蒙工程（harmonyos、harmonyos-native）构建缓存
+.hvigor/
+.hvigor-home/
+oh_modules/
+entry/.preview/
+*.hap
+*.app
