@@ -2,6 +2,7 @@
 
 // ===== 第三方依赖导入 =====
 import Vue from 'vue';
+import userData from './utils/user-data';
 
 // ===== 样式文件导入 =====
 import '../public/styles.css';
@@ -76,6 +77,7 @@ function initApp() {
 function createVueApp() {
   return new Vue({
     el: '#app',
+    mixins: [userData],
     data: {
       // 当前登录用户（从 localStorage 读取）
       currentUser: null,
@@ -381,6 +383,7 @@ function createVueApp() {
         this.initCanvas();
         this.initEventListeners();
         this.startDrawLoop();
+        this.refreshRecords();
         console.log('Vue 组件挂载完成');
       } catch (error) {
         console.error('Vue 组件挂载失败:', error);
@@ -507,12 +510,6 @@ function createVueApp() {
             toast('当前环境不支持保存登录状态，已以便携模式进入', 'warn', 3600);
           }
         }
-      },
-      logout() {
-        storage.removeItem('sbq_token');
-        storage.removeItem('sbq_user');
-        this.currentUser = null;
-        navigate('./login.html');
       },
 
       // ===== Canvas 初始化 =====

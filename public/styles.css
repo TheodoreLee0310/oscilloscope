@@ -3074,3 +3074,22 @@ input:disabled {
     font-size: 24px;
   }
 }
+
+/* User-owned experiment records */
+.records-toggle { position: relative; z-index: 10002; padding: 8px 14px; border: 1px solid #8cb4cd; border-radius: 6px; cursor: pointer; }
+.experiment-records { position: fixed; z-index: 10002; inset: 150px 16px 16px; overflow-y: auto; box-shadow: 0 8px 40px #0005; margin: 0; padding: 20px; border: 1px solid #d6e0e8; border-radius: 10px; background: #fff; color: #24384a; }
+.records-heading, .records-status, .records-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.records-heading { justify-content: space-between; }
+.records-heading h2 { margin: 0; }
+.experiment-records button { padding: 8px 12px; cursor: pointer; border: 1px solid #aac2d2; border-radius: 5px; background: #edf6fc; color: #163b58; }
+.experiment-records button:disabled { opacity: .55; cursor: wait; }
+.records-form { display: grid; gap: 12px; margin: 16px 0; max-width: 720px; }
+.records-form label { display: grid; gap: 6px; }
+.records-form input, .records-form textarea { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #aabcca; border-radius: 5px; font: inherit; }
+.records-form button { justify-self: start; background: #156da6; color: #fff; }
+.records-error { color: #b22929; }
+.records-list { list-style: none; padding: 0; max-height: 360px; overflow-y: auto; }
+.records-list li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 0; border-top: 1px solid #e1e8ed; }
+.records-list li > div:first-child { flex: 1; min-width: 180px; overflow-wrap: anywhere; }
+.records-list time { display: block; color: #647887; font-size: 12px; margin-top: 4px; }
+.records-list p { white-space: pre-wrap; }

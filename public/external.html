@@ -50,12 +50,35 @@
         <button @click="setExpStep('imagewave')" :class="{ active: expStep === 'imagewave' }">4. 图片识别</button>
       </div>
 
+      <button class="records-toggle" @click="recordsOpen = !recordsOpen" :aria-expanded="String(recordsOpen)">我的实验</button>
       <!-- 用户信息 / 退出登录 -->
       <div class="user-bar" v-if="currentUser">
         <span class="user-name">{{ currentUser.nickname || currentUser.username }}</span>
-        <button class="logout-btn" @click="logout">退出登录</button>
+        <button class="logout-btn" :disabled="recordsBusy" @click="logout">退出登录</button>
       </div>
     </header>
+
+    <section v-if="recordsOpen" class="experiment-records" aria-label="我的实验记录">
+      <div class="records-heading"><h2>我的实验</h2><button @click="recordsOpen = false">收起</button></div>
+      <p>保存双通道波形、频率、电压、时基、触发和校准参数，以及实验备注。图片文件与地图位置不包含在记录中。</p>
+      <p v-if="!accountVerified"><a href="./login.html">注册 / 登录账号</a>后可保存并恢复自己的实验。</p>
+      <form v-if="accountVerified" @submit.prevent="saveExperiment" class="records-form">
+        <label>实验标题<input v-model="recordTitle" maxlength="80" placeholder="例如：双通道正弦波测量" :disabled="recordsBusy"></label>
+        <label>实验备注<textarea v-model="recordNotes" maxlength="2000" rows="2" placeholder="记录观察结果（可选）" :disabled="recordsBusy"></textarea></label>
+        <button type="submit" :disabled="recordsBusy">保存当前实验</button>
+      </form>
+      <div class="records-status"><button @click="refreshRecords" :disabled="recordsBusy">刷新记录</button>
+        <span role="status" aria-live="polite" :class="{ 'records-error': recordsError }">{{ recordsBusy ? '正在处理…' : recordsMessage }}</span></div>
+      <ul class="records-list">
+        <li v-for="item in records" :key="item.id">
+          <div><strong>{{ item.title }}</strong><time>{{ new Date(item.createdAt).toLocaleString() }}</time><p v-if="item.notes">{{ item.notes }}</p></div>
+          <div class="records-actions"><button @click="restoreExperiment(item.id)" :disabled="recordsBusy">恢复参数</button>
+            <button v-if="pendingDelete !== item.id" @click="pendingDelete = item.id" :disabled="recordsBusy">删除</button>
+            <template v-else><button @click="deleteExperiment(item.id)" :disabled="recordsBusy">确认删除</button><button @click="pendingDelete = null" :disabled="recordsBusy">取消</button></template>
+          </div>
+        </li>
+      </ul>
+    </section>
 
     <!-- 主内容 -->
     <main>

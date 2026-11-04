@@ -44,6 +44,7 @@ module.exports = {
       { directory: path.resolve(__dirname, 'public') },
       { directory: path.resolve(__dirname, 'CDN') },
     ],
+    proxy: [{ context: ['/api'], target: 'http://127.0.0.1:' + (process.env.SBQ_API_PORT || 3000), changeOrigin: false }],
     hot: true,
     liveReload: true,
     watchFiles: ['src/**/*', 'public/**/*'],  // 监听文件变化

@@ -72,3 +72,9 @@ oh_modules/
 entry/.preview/
 *.hap
 *.app
+
+# Private backend database (never commit user data)
+server/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

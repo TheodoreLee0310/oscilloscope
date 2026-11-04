@@ -6,7 +6,7 @@
   <title>登录 · 智波助梦</title>
   <!--
     此页为「自包含静态页」：样式与脚本全部内联，由 public/ 静态目录直接提供。
-    后端就绪后：把下面的 USE_MOCK 改为 false，并确认 API_BASE 指向你的 Express 服务即可。
+    注册与登录通过同源 /api 接口访问后端。
   -->
   <style>
     html, body { margin: 0; height: 100%; font-family: Arial, 'Microsoft YaHei', sans-serif; }
@@ -61,27 +61,22 @@
       </div>
 
       <div id="pane-register" class="hide">
-        <div class="field"><label>用户名</label><input id="r-user" placeholder="3-20 位，登录时使用" /></div>
-        <div class="field"><label>昵称（可选）</label><input id="r-nick" placeholder="显示名称" /></div>
-        <div class="field"><label>密码</label><input id="r-pass" type="password" placeholder="至少 6 位" /></div>
+        <div class="field"><label>用户名</label><input id="r-user" maxlength="20" placeholder="3–20 位中文、字母、数字、_ 或 -" /></div>
+        <div class="field"><label>昵称（可选）</label><input id="r-nick" maxlength="40" placeholder="显示名称" /></div>
+        <div class="field"><label>密码</label><input id="r-pass" type="password" placeholder="8–128 位" /></div>
         <div class="field"><label>确认密码</label><input id="r-confirm" type="password" placeholder="再次输入密码" /></div>
         <button class="btn" id="btn-register" onclick="onRegister()">注 册</button>
       </div>
     </div>
-    <div class="foot">登录信息将保存至后端 MySQL，实现多用户与实验记录持久化</div>
+    <div class="foot">账号与实验记录保存至服务器，重新登录后可恢复</div>
   </div>
 
   <script>
-    // ===== 后端接入配置 =====
-    // API_BASE：Express 服务地址（后端就绪后确认此地址）
-    // USE_MOCK：true = 使用浏览器本地数据；false = 调用真实后端接口
-    var API_BASE = 'http://localhost:3000/api';
-    var USE_MOCK = true;
+    var API_BASE = '/api';
 
     // localStorage 键名（与后续 Vue 应用保持一致）
     var TOKEN_KEY = 'sbq_token';
     var USER_KEY = 'sbq_user';
-    var USERS_KEY = 'sbq_mock_users';
 
     function $(id) { return document.getElementById(id); }
 
@@ -140,11 +135,6 @@
       };
     })();
 
-    function getUsers() {
-      try { return JSON.parse(storage.getItem(USERS_KEY) || '[]'); } catch (e) { return []; }
-    }
-    function setUsers(list) { storage.setItem(USERS_KEY, JSON.stringify(list)); }
-
     function saveSession(token, user) {
       storage.setItem(TOKEN_KEY, token);
       storage.setItem(USER_KEY, JSON.stringify(user));
@@ -161,55 +151,32 @@
       }
       return url;
     }
-    function toPublic(u) {
-      return { id: u.id, username: u.username, nickname: u.nickname || u.username, createdAt: u.createdAt };
-    }
-    function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-
-    // 统一请求封装（真实后端时使用）
-    function request(path, options) {
-      options = options || {};
-      return fetch(API_BASE + path, {
-        method: options.method || 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: options.body ? JSON.stringify(options.body) : undefined
-      }).then(function (res) {
-        return res.json().then(function (data) {
-          if (!res.ok) throw new Error((data && data.message) || '请求失败(' + res.status + ')');
-          return data;
+    // Registration never writes passwords into browser storage.
+    async function request(path, data) {
+      if (!/^https?:$/.test(location.protocol)) throw new Error('请打开后端网页地址使用账号功能，或选择游客体验');
+      if (!storage.persistent) throw new Error('请允许浏览器保存登录状态后再登录，或选择游客体验');
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 10000);
+      try {
+        var res = await fetch(API_BASE + path, {
+          method: 'POST', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
         });
-      });
+        var result = await res.json().catch(function () { throw new Error('后端尚未启动，请启动服务后重试'); });
+        if (!res.ok) throw new Error(result.message || '请求失败');
+        return result;
+      } catch (e) {
+        if (e.name === 'AbortError') throw new Error('请求超时，请稍后重试；注册超时可先尝试登录');
+        if (e instanceof TypeError) throw new Error('无法连接后端，请检查服务是否已启动');
+        throw e;
+      } finally { clearTimeout(timer); }
     }
-
     function login(username, password) {
-      if (!USE_MOCK) {
-        return request('/auth/login', { method: 'POST', body: { username: username, password: password } })
-          .then(function (d) { return saveSession(d.token, d.user); });
-      }
-      return delay(400).then(function () {
-        var u = getUsers().filter(function (x) {
-          return x.username === username && x.password === password;
-        })[0];
-        if (!u) throw new Error('用户名或密码错误');
-        return saveSession('mock-token-' + u.id, toPublic(u));
-      });
+      return request('/auth/login', { username: username, password: password })
+        .then(function (d) { return saveSession(d.token, d.user); });
     }
-
     function register(username, password, nickname) {
-      if (!USE_MOCK) {
-        return request('/auth/register', { method: 'POST', body: { username: username, password: password, nickname: nickname } })
-          .then(function (d) { return saveSession(d.token, d.user); });
-      }
-      return delay(400).then(function () {
-        var users = getUsers();
-        if (users.some(function (x) { return x.username === username; })) throw new Error('该用户名已被注册');
-        var nu = {
-          id: Date.now(), username: username, password: password,
-          nickname: nickname || username, createdAt: new Date().toISOString()
-        };
-        users.push(nu); setUsers(users);
-        return toPublic(nu);
-      });
+      return request('/auth/register', { username: username, password: password, nickname: nickname });
     }
 
     function onLogin() {
@@ -233,7 +200,7 @@
           p = $('r-pass').value, c = $('r-confirm').value;
       if (!u || !p) return showMsg('请填写用户名和密码', 'error');
       if (u.length < 3 || u.length > 20) return showMsg('用户名长度需为 3-20 位', 'error');
-      if (p.length < 6) return showMsg('密码至少 6 位', 'error');
+      if (p.length < 8 || p.length > 128) return showMsg('密码需为 8–128 位', 'error');
       if (p !== c) return showMsg('两次输入的密码不一致', 'error');
       $('btn-register').disabled = true;
       register(u, p, n)

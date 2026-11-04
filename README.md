@@ -55,6 +55,8 @@
 │   ├── WaveformUtilities.js   # 波形工具
 │   ├── StepAdjustmentUtils.js # 步进调节工具
 │   └── constants.js           # 常量
+├── server/                    # HTTP API、SQLite 数据库与后端测试
+├── shared/                    # 前后端共用的实验参数校验
 ├── docs/                      # 构建产物（npm run build 输出，已纳入版本管理）
 ├── packaging/                 # Electron 打包脚本与配置
 ├── electron-main.js           # Electron 主进程入口
@@ -64,14 +66,16 @@
 
 ## 快速开始
 
-环境要求：**Node.js ≥ 18**、npm。
+环境要求：完整前后端使用 **Node.js ≥ 22.13（推荐 Node.js 24）**、npm。SQLite 随 Node.js 提供，无需安装 MySQL。
 
 ```bash
 npm install
-npm run dev
+npm run dev:full
 ```
 
-开发服务器默认运行在 <http://localhost:8081>，并会自动打开 `index.html`。
+开发页面默认运行在 <http://localhost:8081>，后端运行在 <http://127.0.0.1:3000>。开发服务器将 `/api` 请求转发到后端。
+
+只体验已构建版本：运行 `npm run build`、`npm run server`，然后打开 <http://127.0.0.1:3000/login.html>。
 
 > **注意**：`index.html` 与 `internal.html` 都已接入登录守卫，**未登录会自动跳转到 `login.html`**。首次使用请先注册一个账号，详见下文「登录与用户系统」。
 
@@ -79,7 +83,9 @@ npm run dev
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm run dev` | 启动开发服务器（端口 8081，热更新） |
+| `npm run dev:full` | 同时启动后端和开发网页 |
+| `npm run server` | 启动后端并提供 docs 网页（端口 3000） |
+| `npm run dev` | 只启动开发网页（端口 8081，热更新；账号功能需要后端） |
 | `npm run build` | 生产构建，输出到 `docs/` |
 | `npm run electron` | 以 Electron 运行已构建产物 |
 | `npm run electron:dev` | 同时启动开发服务器与 Electron |
@@ -87,7 +93,8 @@ npm run dev
 | `npm run dist:win` / `dist:mac` / `dist:linux` | 打包指定平台 |
 | `npm run build:harmonyos` | 构建 Web 产物并同步进鸿蒙工程（`harmonyos/.../rawfile/www`） |
 | `npm run harmonyos:sync` | 只做同步（要求 `docs/` 已存在） |
-| `npm test` | 平台适配层单元测试（存储降级 / URL 桥接 / 鸿蒙 UA 识别） |
+| `npm test` | 平台、地图与后端测试（含隔离的临时数据库） |
+| `npm run test:user-data` | 浏览器注册、登录、保存、刷新恢复和删除测试 |
 | `npm run test:smoke` | 用 Electron 真实内核跑一遍构建产物做冒烟测试 |
 
 ## 鸿蒙（HarmonyOS）应用
@@ -133,31 +140,23 @@ npm run build:harmonyos      # 1. 构建并同步 Web 产物到 rawfile
 
 ## 登录与用户系统
 
-当前为**前端 Mock 模式**，无需后端即可跑通完整流程：
+现在使用真实后端账号与 SQLite 持久化，详细配置见 [server/README.md](server/README.md)。
 
-- 账号数据存放于浏览器 `localStorage`，键名 `sbq_mock_users`
-- 登录态存放于 `sbq_token`（令牌）与 `sbq_user`（用户信息）
-- 主界面右上角显示当前用户昵称，并提供「退出登录」
+1. 在登录页注册账号（密码 8–128 位）并登录。
+2. 调整波形，点击页头「我的实验」，填写标题与备注，点击「保存当前实验」。
+3. 下次登录后打开「我的实验」，点击「恢复参数」即可继续，也可以删除旧记录。
 
-后端（Express + MySQL）尚在规划中。接入后只需修改 `public/login.html` 中的两个开关即可切换到真实接口：
+保存内容包括双通道参数、波形类型、时基、电压、相位、触发和校准设置。图片原文件、地图位置、AI 对话和 3D 场景暂不保存。每个账号最多保存 500 条实验，保存采用手动快照，不自动覆盖旧记录。
 
-```js
-var API_BASE = 'http://localhost:3000/api'; // 后端服务地址
-var USE_MOCK = false;                       // 关闭 Mock，改为请求真实后端
-```
+密码通过 scrypt 加盐哈希存储；会话在 7 天后过期，退出登录会撤销当前会话。接口只允许访问当前用户的实验。游客仍可体验所有仿真页面，但不能保存实验。旧版浏览器 Mock 账号不会自动迁入数据库，需要重新注册。
 
-预留的接口约定：
-
-| 方法 | 路径 | 请求体 | 响应 |
-| --- | --- | --- | --- |
-| POST | `/api/auth/register` | `{ username, password, nickname }` | `{ token, user }` |
-| POST | `/api/auth/login` | `{ username, password }` | `{ token, user }` |
+数据库默认位于 `server/data/oscilloscope.sqlite`，不进入 Git。关闭服务后备份整个 `server/data/` 文件夹即可保留账号与实验；再次启动仍能读取已有数据。
 
 ## 部署
 
-`npm run build` 会把完整可发布的站点输出到 `docs/`（含 `login.html`、bundle、样式、静态资源与贴图）。可将其部署到任意静态服务器。
+`npm run build` 将网页输出到 `docs/`。账号与保存功能需要运行 `npm run server`，由同一个地址提供网页和 `/api`。对公网部署时使用 HTTPS 反向代理并保留原始 Host；数据库目录需使用持久化磁盘。
 
-若要使用 GitHub Pages：进入仓库 **Settings → Pages**，将 Source 设为 `master` 分支的 `/docs` 目录即可。
+GitHub Pages 只能提供静态游客体验，不能运行此后端或保存账号实验。若只部署静态体验：进入仓库 **Settings → Pages**，将 Source 设为 `master` 分支的 `/docs` 目录即可。
 
 ## 参与贡献
 

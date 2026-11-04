@@ -5,7 +5,7 @@
   "main": "electron-main.js",
   "homepage": "./",
   "scripts": {
-    "test": "node packaging/test-platform.js && node packaging/test-mockmap.js && node packaging/test-baidumap.js",
+    "test": "node packaging/test-platform.js && node packaging/test-mockmap.js && node packaging/test-baidumap.js && npm run test:backend",
     "test:platform": "node packaging/test-platform.js",
     "test:mockmap": "node packaging/test-mockmap.js",
     "test:baidumap": "node packaging/test-baidumap.js",
@@ -33,7 +33,11 @@
     "harmonyos:sync": "node packaging/sync-harmonyos.js",
     "harmonyos:build": "node packaging/build-harmonyos.js",
     "harmonyos:verify": "node packaging/verify-harmonyos.js",
-    "build:harmonyos": "npm run build && node packaging/sync-harmonyos.js"
+    "build:harmonyos": "npm run build && node packaging/sync-harmonyos.js",
+    "server": "node server/index.js",
+    "dev:full": "concurrently -k \"npm run server\" \"npm run dev\"",
+    "test:backend": "node --test server/test/*.test.js",
+    "test:user-data": "node packaging/test-user-data.js"
   },
   "build": {
     "appId": "com.oscilloscope.simulator",
