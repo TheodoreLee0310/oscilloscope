@@ -26,6 +26,32 @@ function createServer(options = {}) {
       id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL, notes TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS experiments_user ON experiments(user_id, created_at);`);
+  // ---------------------------------------------------------------
+  // 迁移：旧库没有同步所需字段，逐列补齐（幂等，可重复执行）
+  // 目的：同步协议需要 (user_id, client_id) 幂等键与 rev 版本号；
+  // 原则：不删除、不重写既有行，只补列与索引，updated_at 用 created_at 回填。
+  // ---------------------------------------------------------------
+  const experimentColumns = db.prepare('PRAGMA table_info(experiments)').all().map(column => column.name);
+  for (const [name, ddl] of [
+    ['client_id', 'TEXT'],
+    ['rev', 'INTEGER NOT NULL DEFAULT 1'],
+    ['updated_at', 'TEXT'],
+    ['deleted', 'INTEGER NOT NULL DEFAULT 0'],
+    ['last_op_id', 'TEXT'],
+  ]) {
+    if (!experimentColumns.includes(name)) db.exec(`ALTER TABLE experiments ADD COLUMN ${name} ${ddl}`);
+  }
+  db.exec(`UPDATE experiments SET updated_at = created_at WHERE updated_at IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS experiments_client ON experiments(user_id, client_id);
+    CREATE TABLE IF NOT EXISTS sync_operations (
+      user_id INTEGER NOT NULL,
+      operation_id TEXT NOT NULL,
+      response TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, operation_id));`);
+  // 幂等记录只保留 7 天，避免无限增长
+  db.prepare('DELETE FROM sync_operations WHERE created_at < ?')
+    .run(new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
   const docRoot = path.resolve(options.docsPath || path.join(__dirname, '..', 'docs'));
   const attempts = new Map();
   const authLimit = options.authLimit ?? 30;
@@ -56,8 +82,123 @@ function createServer(options = {}) {
     if (!user) throw failure(401, '登录已过期，请重新登录');
     return { user, tokenHash, expiresAt: user.session_expires_at };
   }
-  async function body(req, maxBytes = 32768) {
-    if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) throw failure(415, '请使用 JSON 请求');
+
+  /* ------------------------------------------------------------------ *
+   * 同步协议（手动触发）
+   *   - 幂等：同一 (user_id, operation_id) 只执行一次，重放返回缓存结果
+   *   - 版本：客户端携带 baseServerRev，与服务器 rev 原子比较，不匹配即冲突
+   *   - 墓碑：已删除的记录不会被 update 复活；delete 重放是幂等的
+   * ------------------------------------------------------------------ */
+
+  function checkSyncTitle(value) {
+    if (typeof value !== 'string' || value.trim().length === 0 || value.length > 80) {
+      throw failure(400, '标题需为 1–80 位');
+    }
+    return value.trim();
+  }
+
+  function checkSyncNotes(value) {
+    if (value === undefined || value === null) return '';
+    if (typeof value !== 'string' || value.length > 2000) throw failure(400, '备注不能超过 2000 位');
+    return value;
+  }
+
+  function syncItem(row) {
+    let stateVersion = 0;
+    try { stateVersion = JSON.parse(row.state).version || 0; } catch (_) { stateVersion = 0; }
+    return {
+      id: row.id,
+      clientId: row.client_id,
+      title: row.title,
+      notes: row.notes,
+      rev: row.rev,
+      updatedAt: row.updated_at,
+      deleted: row.deleted === 1,
+      stateVersion,
+    };
+  }
+
+  function applySyncOperation(input, user) {
+    const operationId = typeof input.operationId === 'string' ? input.operationId : '';
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(operationId)) throw failure(400, 'operationId 格式不正确');
+    const type = input.type;
+    if (type !== 'create' && type !== 'update' && type !== 'delete') {
+      throw failure(400, 'type 必须是 create / update / delete');
+    }
+    const clientId = typeof input.clientId === 'string' ? input.clientId : '';
+    if (!/^[A-Za-z0-9_-]{6,80}$/.test(clientId)) throw failure(400, 'clientId 格式不正确');
+    const baseServerRev = Number.isInteger(input.baseServerRev) ? input.baseServerRev : -1;
+    if (baseServerRev < 0) throw failure(400, 'baseServerRev 必须是非负整数');
+
+    // 幂等：重放同一 operationId 直接返回上次结果（含冲突、墓碑等所有分支）
+    const cached = db.prepare('SELECT response FROM sync_operations WHERE user_id=? AND operation_id=?')
+      .get(user.id, operationId);
+    if (cached) return JSON.parse(cached.response);
+
+    const now = new Date().toISOString();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const row = db.prepare('SELECT * FROM experiments WHERE user_id=? AND client_id=?').get(user.id, clientId);
+      let outcome;
+      if (type === 'create') {
+        if (row) {
+          // (user_id, client_id) 已存在：重复创建被吸收，不新增行
+          outcome = { status: 'applied', created: false, item: syncItem(row) };
+        } else {
+          const title = checkSyncTitle(input.title);
+          const notes = checkSyncNotes(input.notes);
+          const state = validateState(input.state);
+          const active = db.prepare('SELECT count(*) AS n FROM experiments WHERE user_id=? AND deleted=0').get(user.id).n;
+          if (active >= 500) throw failure(409, '最多保存 500 条实验，请先删除旧记录');
+          const id = crypto.randomUUID();
+          db.prepare(`INSERT INTO experiments
+            (id,user_id,title,notes,state,created_at,client_id,rev,updated_at,deleted,last_op_id)
+            VALUES (?,?,?,?,?,?,?,1,?,0,?)`)
+            .run(id, user.id, title, notes, JSON.stringify(state), now, clientId, now, operationId);
+          outcome = {
+            status: 'applied', created: true,
+            item: syncItem(db.prepare('SELECT * FROM experiments WHERE id=?').get(id)),
+          };
+        }
+      } else if (!row) {
+        outcome = { status: 'not-found' };
+      } else if (row.deleted === 1) {
+        // 墓碑优先：update 不能复活已删除记录；delete 重放视为成功
+        outcome = type === 'delete'
+          ? { status: 'applied', created: false, item: syncItem(row) }
+          : { status: 'deleted', item: syncItem(row) };
+      } else if (row.rev !== baseServerRev) {
+        // 原子版本比较：不覆盖，返回服务器当前状态，由客户端保留双方数据
+        outcome = { status: 'conflict', item: syncItem(row) };
+      } else if (type === 'update') {
+        const title = checkSyncTitle(input.title);
+        const notes = checkSyncNotes(input.notes);
+        const state = validateState(input.state);
+        db.prepare('UPDATE experiments SET title=?,notes=?,state=?,rev=rev+1,updated_at=?,last_op_id=? WHERE id=?')
+          .run(title, notes, JSON.stringify(state), now, operationId, row.id);
+        outcome = {
+          status: 'applied', created: false,
+          item: syncItem(db.prepare('SELECT * FROM experiments WHERE id=?').get(row.id)),
+        };
+      } else {
+        db.prepare('UPDATE experiments SET deleted=1,rev=rev+1,updated_at=?,last_op_id=? WHERE id=?')
+          .run(now, operationId, row.id);
+        outcome = {
+          status: 'applied', created: false,
+          item: syncItem(db.prepare('SELECT * FROM experiments WHERE id=?').get(row.id)),
+        };
+      }
+      db.prepare('INSERT INTO sync_operations VALUES(?,?,?,?)')
+        .run(user.id, operationId, JSON.stringify(outcome), now);
+      db.exec('COMMIT');
+      return outcome;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  async function body(req, maxBytes = 32768) {    if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) throw failure(415, '请使用 JSON 请求');
     const chunks = [];
     let size = 0;
     for await (const chunk of req) {
@@ -121,6 +262,10 @@ function createServer(options = {}) {
           db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash);
           return json(res, 200, { ok: true });
         }
+        // 同步协议入口：一次只处理一个操作，客户端用稳定 operationId 重试
+        if (req.method === 'POST' && route === '/api/sync/apply') {
+          return json(res, 200, applySyncOperation(await body(req), user));
+        }
         if (req.method === 'GET' && route === '/api/experiments') {
           // 关键字搜索 + 分页（limit/offset）。不带参数时行为与旧版一致，
           // 只是多返回 total，原生客户端只读 items，因此向后兼容。
@@ -130,7 +275,7 @@ function createServer(options = {}) {
           const rawOffset = Number.parseInt(url.searchParams.get('offset') || '0', 10);
           const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 100, 1), 200);
           const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
-          let where = 'user_id=?';
+          let where = 'user_id=? AND deleted=0';
           const params = [user.id];
           if (keyword.length > 0) {
             const escaped = keyword.replace(/[\\%_]/g, m => '\\' + m);
@@ -151,13 +296,14 @@ function createServer(options = {}) {
           try { state = validateState(data.state); } catch (error) { throw failure(400, error.message); }
           if (db.prepare('SELECT count(*) AS n FROM experiments WHERE user_id=?').get(user.id).n >= 500) throw failure(409, '最多保存 500 条实验，请先删除旧记录');
           const item = { id: crypto.randomUUID(), title: data.title.trim(), notes: data.notes || '', state, createdAt: new Date().toISOString() };
-          db.prepare('INSERT INTO experiments VALUES(?,?,?,?,?,?)').run(item.id, user.id, item.title, item.notes, JSON.stringify(state), item.createdAt);
+          db.prepare(`INSERT INTO experiments (id,user_id,title,notes,state,created_at,rev,updated_at,deleted)
+            VALUES (?,?,?,?,?,?,1,?,0)`).run(item.id, user.id, item.title, item.notes, JSON.stringify(state), item.createdAt, item.createdAt);
           return json(res, 201, { item });
         }
         // 导出：整份记录打包成一个 JSON，便于备份或跨设备迁移
         if (req.method === 'GET' && route === '/api/experiments/export') {
           const rows = db.prepare(`SELECT title,notes,state,created_at AS createdAt FROM experiments
-            WHERE user_id=? ORDER BY created_at ASC, rowid ASC`).all(user.id);
+            WHERE user_id=? AND deleted=0 ORDER BY created_at ASC, rowid ASC`).all(user.id);
           const items = rows.map(row => ({
             title: row.title, notes: row.notes, state: JSON.parse(row.state), createdAt: row.createdAt
           }));
@@ -186,11 +332,12 @@ function createServer(options = {}) {
               rows.push({ title, notes, state, createdAt });
             } catch (error) { errors.push('第 ' + (index + 1) + ' 条：' + error.message); }
           });
-          const insert = db.prepare('INSERT INTO experiments VALUES(?,?,?,?,?,?)');
+          const insert = db.prepare(`INSERT INTO experiments (id,user_id,title,notes,state,created_at,rev,updated_at,deleted)
+            VALUES (?,?,?,?,?,?,1,?,0)`);
           db.exec('BEGIN');
           try {
             for (const row of rows) {
-              insert.run(crypto.randomUUID(), user.id, row.title, row.notes, JSON.stringify(row.state), row.createdAt);
+              insert.run(crypto.randomUUID(), user.id, row.title, row.notes, JSON.stringify(row.state), row.createdAt, row.createdAt);
             }
             db.exec('COMMIT');
           } catch (error) { db.exec('ROLLBACK'); throw error; }
@@ -219,13 +366,16 @@ function createServer(options = {}) {
           return json(res, 200, { item });
         }
         if (match && ['GET', 'DELETE'].includes(req.method)) {
-          const item = db.prepare('SELECT id,title,notes,state,created_at AS createdAt FROM experiments WHERE id=? AND user_id=?').get(match[1], user.id);
+          const item = db.prepare(`SELECT id,title,notes,state,created_at AS createdAt,
+            rev, client_id AS clientId, updated_at AS updatedAt, deleted
+            FROM experiments WHERE id=? AND user_id=?`).get(match[1], user.id);
           if (!item) throw failure(404, '实验记录不存在');
           if (req.method === 'DELETE') {
             db.prepare('DELETE FROM experiments WHERE id=? AND user_id=?').run(match[1], user.id);
             return json(res, 200, { ok: true });
           }
           item.state = JSON.parse(item.state);
+          item.deleted = item.deleted === 1;
           return json(res, 200, { item });
         }
         throw failure(404, '接口不存在');

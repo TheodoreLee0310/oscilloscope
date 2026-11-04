@@ -3,6 +3,7 @@ import { ApiError } from '../service/ApiService';
 import { ExperimentPage, ExperimentService, ExperimentSummary, ImportOutcome } from '../service/ExperimentService';
 import { DraftRecord, DraftService, isValidDraftSetup } from '../service/DraftService';
 import { LocalRecord, RecordsService, RemoveResult } from '../service/RecordsService';
+import { SyncOutcome, SyncService } from '../service/SyncService';
 import { SessionService } from '../service/SessionService';
 import { common } from '@kit.AbilityKit';
 import { ImportItem, TransferSummary, classifyImport, containsSensitiveField } from '../service/ExperimentTransfer';
@@ -72,6 +73,7 @@ struct ScopePage {
   @State localEditTitle: string = '';
   @State localEditNotes: string = '';
   @State localPendingDelete: string = '';
+  @State localBusy: boolean = false;
   /** 游客记录迁入账号的确认提示 / 无法确认归属的旧数据提示 */
   @State guestPrompt: string = '';
   @State orphanNotice: string = '';
@@ -328,6 +330,37 @@ struct ScopePage {
       this.localMessage = '已恢复：' + record.title;
     } catch (_) {
       this.localMessage = '记录参数已损坏，未恢复';
+    }
+  }
+
+  /** 手动同步：本轮只有用户点按钮才上传，不做后台自动同步 */
+  private async syncLocalRecords(): Promise<void> {
+    if (this.draftUserId() <= 0) {
+      this.localMessage = '游客记录不能同步，请先登录账号';
+      return;
+    }
+    const token: string = AppStorage.get<string>('token') || '';
+    if (token.length === 0) {
+      this.localMessage = '请先登录后再同步';
+      return;
+    }
+    this.localBusy = true;
+    this.localMessage = '正在同步…';
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) {
+        this.localMessage = '应用上下文不可用';
+        return;
+      }
+      const filesDir: string = (context as common.UIAbilityContext).filesDir;
+      const outcome: SyncOutcome = await SyncService.syncAll(filesDir, this.draftServer(),
+        this.draftUserId(), token);
+      this.localMessage = outcome.message;
+      this.loadLocalRecords();
+    } catch (error) {
+      this.localMessage = '同步失败：' + (error as Error).message;
+    } finally {
+      this.localBusy = false;
     }
   }
 
@@ -718,7 +751,7 @@ struct ScopePage {
             }
           }.width('100%').padding(8).backgroundColor('#2a2416').borderRadius(8)
         }
-        Text('这些记录只存在本机，联网也不会自动上传；同步功能在下一轮接入。')
+        Text('记录只存在本机，联网不会自动上传；点「同步到服务器」才会手动推送。')
           .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
         TextInput({ text: this.localTitle, placeholder: '本机记录标题（必填）' })
           .maxLength(80).width('100%')
@@ -727,6 +760,24 @@ struct ScopePage {
           .maxLength(2000).height(56).width('100%')
           .onChange((value: string) => { this.localNotes = value; })
         Button('存为本机记录').width('100%').onClick(() => { this.saveLocalRecord(); })
+        Row({ space: 8 }) {
+          Button(this.localBusy ? '同步中…' : '同步到服务器')
+            .layoutWeight(1)
+            .enabled(!this.localBusy && this.loggedIn)
+            .onClick(() => { this.syncLocalRecords(); })
+          Button('刷新')
+            .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+            .border({ width: 1, color: '#25323d' })
+            .enabled(!this.localBusy)
+            .onClick(() => {
+              this.loadLocalRecords();
+              this.refreshGuestPrompt();
+              this.refreshOrphanNotice();
+            })
+        }.width('100%')
+        if (!this.loggedIn) {
+          Text('游客记录不能同步，登录后可用。').fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+        }
         Text(this.localMessage).fontColor('#d5e6dc').fontSize(12).width('100%')
         ForEach(this.localRecords, (record: LocalRecord) => {
           Column({ space: 6 }) {
@@ -752,6 +803,14 @@ struct ScopePage {
               Text('修订 ' + record.rev.toString() + ' · ' +
                 new Date(record.updatedAtMs).toLocaleString())
                 .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+              if (record.conflictOfId.length > 0) {
+                Text('冲突副本 · 来源 ' + record.conflictOfId)
+                  .fontColor('#ffb74d').fontSize(10).width('100%')
+              }
+              if (record.lastSyncResult.indexOf('failed') === 0) {
+                Text('上次同步失败：' + record.lastSyncResult)
+                  .fontColor('#ff8a80').fontSize(10).width('100%')
+              }
               if (record.notes.length > 0) {
                 Text(record.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
               }
