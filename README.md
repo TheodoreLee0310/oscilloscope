@@ -1,171 +1,164 @@
 # ShiBoQI · 智波助梦
 
-> 基于 WebGL 的智能示波器交互式虚拟仿真系统
+**简体中文** · [English](README.en.md) · [繁體中文](README.zh-TW.md)
 
-一套面向电子技术教学的交互式示波器仿真系统：既可以在浏览器中通过 2D 画布操作面板与观察波形，也可以用 Three.js 呈现示波器内部结构的三维工作原理，并支持通过 Electron 打包为桌面应用。
+面向电子技术教学的示波器仿真项目，主要开发 **HarmonyOS 原生应用**。使用 ArkTS、ArkUI 与 Canvas 实现双通道波形、触发和参数调节，并提供本机草稿、离线实验记录和服务器同步。浏览器、ArkWeb 与 Electron 版本保留三维 CRT 原理演示、VR 寻波等扩展功能。
 
-## 功能特性
+> **开发状态（2026-11-05）：新工作提交到 `deve`。** 手动推送与拉取代码已加入，电脑侧逻辑检查已有覆盖；这批同步改动尚未完成鸿蒙编译及设备验收，由贡献者验证后再决定是否合并主分支。已有 HAP 不代表包含最新源码。
 
-- **自检校准**：以固定参数的方波为基准，通过微调滑块完成校准，理解示波器的校准原理。
-- **标准测量**：6 种波形（正弦、方波、三角、锯齿、噪声、脉冲），双通道支持独立显示 / 同向叠加 / 垂直叠加。
-- **李萨如图形**：垂直叠加模式下调整两通道的频率比与相位差，观察李萨如图形变化。
-- **触发系统**：自动 / 常规 / 单次触发，可调触发电平、触发源与触发斜率，稳定波形显示。
-- **图片识别波形**：上传或截取波形图片，由内置算法识别波形类型与参数，并一键应用到示波器。
-- **VR 寻波**：结合百度地图定位，把地形特征映射为对应波形（山脉→锯齿波、水面→正弦波、平原→低频正弦波等）。
-- **三维内部原理**：Three.js 构建的 CRT 结构演示，含分解视图、爆炸动画、标签系统与电子束 / 荧光屏仿真。
-- **内置 AI 助手**：基于本地知识库的问答助手，解答系统使用相关问题。
-- **新手指引**：分步引导教程（Tour Guide），首次进入主界面自动弹出。
+## 选择运行方式
 
-## 技术栈
+| 版本 | 位置 | 用途与范围 |
+| --- | --- | --- |
+| HarmonyOS 原生版（主要开发方向） | [`harmonyos-native/`](harmonyos-native/) | 纯 ArkTS / ArkUI；Canvas 示波器、账号、自动草稿、离线记录、手动同步 |
+| HarmonyOS ArkWeb 版 | [`harmonyos/`](harmonyos/) | ArkTS 容器加载 Web 页面，补充三维 CRT、VR 寻波、地图与导览 |
+| 浏览器版 | [`src/`](src/)、[`public/`](public/) | 在电脑浏览器中体验波形与三维教学；连接后端可保存账号实验 |
+| Electron 桌面版 | [`electron-main.js`](electron-main.js) | 打包 Web 界面；本地页面可游客体验，账号功能使用后端网页 |
 
-| 类别 | 技术 |
-| --- | --- |
-| 视图层 | Vue.js 2.7.16 |
-| 三维渲染 | Three.js 0.177.0 |
-| 动画 | TWEEN.js |
-| 参数面板 | dat.GUI |
-| 构建工具 | Webpack 5 + webpack-dev-server 5 |
-| 桌面端 | Electron 28 + electron-builder |
-| 鸿蒙端 | ArkWeb（Web 组件）+ ArkTS 容器，见 [`harmonyos/`](harmonyos/README.md) |
+原生版当前不包含三维 CRT、VR 寻波或地图。两种鸿蒙工程的功能和验证进度应分别看待。
 
-## 目录结构
+## 已实现的功能
 
-```
-├── public/                    # HTML 模板与静态资源
-│   ├── external.html          # → 生成 index.html（面板 / 示波器）
-│   ├── internal.html          # → 生成 internal.html（三维内部原理）
-│   ├── login.html             # → 输出 login.html（登录 / 注册）
-│   ├── styles.css             # 主样式
-│   └── textures/              # 贴图
-├── src/                       # 前端源码
-│   ├── main.js                # 三维原理页入口
-│   ├── external.js            # 面板 / 示波器页入口（Vue 实例）
-│   ├── components/            # 三维组件（电子束、荧光屏、CRT 外壳、标签、分解视图等）
-│   ├── controllers/           # GUI / UI 控制器
-│   ├── materials/             # 材质管理
-│   ├── widgets/               # 页面切换控件、引导教程（Tour Guide）
-│   ├── geometry/ utils/ examples/
-│   └── config.json            # 三维场景配置
-├── scripts/                   # 波形与业务逻辑模块
-│   ├── waveDrawer.js          # 波形绘制
-│   ├── lissajousDrawer.js     # 李萨如图形
-│   ├── calibrationLogic.js    # 校准逻辑
-│   ├── deepseekService.js     # 波形 / 图像识别算法（本地计算，无网络请求）
-│   ├── knowledgeBase.js       # 本地知识库（AI 助手问答）
-│   ├── WaveformUtilities.js   # 波形工具
-│   ├── StepAdjustmentUtils.js # 步进调节工具
-│   └── constants.js           # 常量
-├── server/                    # HTTP API、SQLite 数据库与后端测试
-├── shared/                    # 前后端共用的实验参数校验
-├── docs/                      # 构建产物（npm run build 输出，已纳入版本管理）
-├── packaging/                 # Electron 打包脚本与配置
-├── electron-main.js           # Electron 主进程入口
-├── webpack.config.js
-└── package.json
-```
+### 示波器与教学
 
-## 快速开始
+- 原生双通道支持正弦、方波、三角、锯齿、脉冲和噪声，可调整频率、幅值、相位、时基、垂直灵敏度与位置。
+- 原生显示模式包括双踪、叠加与李萨如图形，提供触发电平、触发沿、栅格、辉光和屏幕读数。
+- Web / ArkWeb 另提供自检校准、波形图片识别、三维 CRT 结构与电子束演示、VR 寻波、本地知识库问答和新手导览。地图功能依赖网络及对应服务配置。
 
-环境要求：完整前后端使用 **Node.js ≥ 22.13（推荐 Node.js 24）**、npm。SQLite 随 Node.js 提供，无需安装 MySQL。
+### 原生数据管理
+
+- **账号与会话**：注册、登录、退出；会话通过 Asset Store 持久化。会话过期后仍可继续本机操作，访问服务器前需重新登录。
+- **自动草稿**：参数变化后定期保存，重启时提示恢复或删除；等待用户选择期间不会用默认参数覆盖草稿。
+- **离线记录**：本机创建、编辑、恢复和删除，草稿与正式记录分开保存。
+- **账号隔离**：按规范化服务器地址与用户 ID 分区，游客独立；游客记录迁入账号须明确确认。
+- **在线实验管理**：标题与备注编辑、搜索、分页；导出服务器实验到应用沙箱文件，导入先预览再确认写入服务器。这条导入导出流程需要有效账号和后端连接。
+- **手动同步**：点击后先推送本机修改，成功处理后分页拉取服务器变更与删除；冲突保留本机副本，该副本在下一次手动同步时上传。当前没有后台自动同步。
+
+原生实验参数格式为 **v2**，Web / ArkWeb 为 **v1**。账号可以共用，实验格式不能直接互相恢复；原生导入与拉取会跳过 v1，不自动转换参数。
+
+## 快速开始：浏览器预览
+
+需要 **Node.js 22.13 或更高版本**和 npm，后端使用 Node.js 内置 SQLite，无需单独安装数据库服务。以下命令从仓库根目录运行：
 
 ```bash
+git clone --branch deve https://github.com/TheodoreLee0310/oscilloscope.git
+cd oscilloscope
 npm install
 npm run dev:full
 ```
 
-开发页面默认运行在 <http://localhost:8081>，后端运行在 <http://127.0.0.1:3000>。开发服务器将 `/api` 请求转发到后端。
+打开 [开发网页](http://localhost:8081/login.html)。网页默认端口为 `8081`，后端为 `3000`，开发服务器会代理 `/api` 请求。可以注册并登录，也可以选择游客体验；网页游客不能向服务器保存实验。
 
-只体验已构建版本：运行 `npm run build`、`npm run server`，然后打开 <http://127.0.0.1:3000/login.html>。
-
-> **注意**：`index.html` 与 `internal.html` 都已接入登录守卫，**未登录会自动跳转到 `login.html`**。首次使用请先注册一个账号，详见下文「登录与用户系统」。
-
-### 常用命令
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev:full` | 同时启动后端和开发网页 |
-| `npm run server` | 启动后端并提供 docs 网页（端口 3000） |
-| `npm run dev` | 只启动开发网页（端口 8081，热更新；账号功能需要后端） |
-| `npm run build` | 生产构建，输出到 `docs/` |
-| `npm run electron` | 以 Electron 运行已构建产物 |
-| `npm run electron:dev` | 同时启动开发服务器与 Electron |
-| `npm run dist` | 打包当前平台桌面安装包 |
-| `npm run dist:win` / `dist:mac` / `dist:linux` | 打包指定平台 |
-| `npm run build:harmonyos` | 构建 Web 产物并同步进鸿蒙工程（`harmonyos/.../rawfile/www`） |
-| `npm run harmonyos:sync` | 只做同步（要求 `docs/` 已存在） |
-| `npm test` | 平台、地图与后端测试（含隔离的临时数据库） |
-| `npm run test:user-data` | 浏览器注册、登录、保存、刷新恢复和删除测试 |
-| `npm run test:smoke` | 用 Electron 真实内核跑一遍构建产物做冒烟测试 |
-
-## 鸿蒙（HarmonyOS）应用
-
-本项目的 Web 前端**不依赖 Node / Electron**，因此可以原样装进鸿蒙的 ArkWeb（Web 组件）中运行。
-仓库内的 [`harmonyos/`](harmonyos/README.md) 是一个完整的 DevEco Studio 工程：
+如需使用构建后的网页：
 
 ```bash
-npm run build:harmonyos      # 1. 构建并同步 Web 产物到 rawfile
-# 2. 用 DevEco Studio 5.0+ 打开 harmonyos/ 目录，等待 Sync
-# 3. 连接鸿蒙设备，点 Run
+npm run build
+npm run server
 ```
 
-- 完整的构建步骤、真机验收清单与排查手册：**[`harmonyos/README.md`](harmonyos/README.md)**
-- 兼容性评估、已改造项与待实机验证项：**[`HARMONYOS.md`](HARMONYOS.md)**
+打开 [后端提供的网页](http://127.0.0.1:3000/login.html)。`docs/` 是生成的 Web 产物，修改界面时应编辑 `src/`、`public/` 或 `scripts/`，再重新构建。
 
-> Electron 桌面壳（`electron-main.js`）无法在鸿蒙上运行，这是平台定位决定的；
-> 鸿蒙端走的是「同一份 Web 产物 + ArkWeb 容器」的路线。
+## 开发 HarmonyOS 原生应用
 
-### 两条鸿蒙路线
+1. 使用 DevEco Studio 打开仓库中的 `harmonyos-native/` 目录。
+2. 同步工程依赖。当前工程配置为 HarmonyOS `5.0.0(12)`，需准备对应 SDK。
+3. 账号与同步开发需要在电脑或服务器上启动 `npm run server`，在应用登录页填写设备可访问的服务地址。
+4. 贡献者完成编译、设备安装和交互验收后，再反馈结果与提交号。
 
-仓库里有两个互相补充、而不是互相替代的鸿蒙工程：
+设备上的 `127.0.0.1` 指向设备本身。通过局域网连接电脑时，后端需监听可访问的地址，应用填写电脑的局域网 IP。Windows PowerShell 示例：
 
-| 目录 | 路线 | 适用场合 |
+```powershell
+$env:SBQ_HOST = '0.0.0.0'
+npm run server
+```
+
+应用服务地址示例：`http://192.168.1.10:3000`，请替换为实际电脑 IP，并允许对应防火墙端口。公网部署使用 HTTPS。
+
+供贡献者使用的原生构建命令：
+
+```bash
+npm run harmonyos:native:build
+```
+
+脚本会查找 DevEco Studio；自定义安装位置可通过 `DEVECO_HOME` 指定。默认工程未配置签名：**签名是用证书标识应用发布者与校验安装包的步骤**，设备安装所需配置见[设备验收说明](harmonyos-native/DEVICE_ACCEPTANCE.md)。构建成功与设备验收通过是两项不同结果。
+
+ArkWeb 补充版使用独立工程，构建顺序为：
+
+```bash
+npm run build:harmonyos
+npm run harmonyos:build
+```
+
+第一条构建并同步 Web 资源，第二条打包 ArkWeb HAP。详细说明见 [ArkWeb 工程文档](harmonyos/README.md)。
+
+## 数据保存与后端配置
+
+| 数据 | 保存位置与行为 |
+| --- | --- |
+| 原生会话 | 系统 Asset Store；服务器地址等普通设置存入 preferences |
+| 原生草稿与离线记录 | 应用 `filesDir` 下的 JSON 文件；原子替换、版本标记及归属校验 |
+| 本机文件异常 | 损坏内容隔离；归属不符或不支持的旧格式保留原文件，不自动迁入当前账号 |
+| 账号与服务器实验 | 默认 `server/data/oscilloscope.sqlite`；数据库不提交 Git |
+| 原生导出文件 | 应用沙箱 `files/exports/`；系统文件选择器仍待完善 |
+
+密码使用加盐 scrypt 哈希，服务器保存会话令牌摘要；默认会话有效期为 7 天。实验保存的是参数快照，不包含原始图片、地图位置、问答内容或三维场景。
+
+| 环境变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| [`harmonyos/`](harmonyos/README.md) | ArkWeb 容器 + ArkTS 外壳，100% 复用 Web 产物 | 要完整的三维 CRT、VR 寻波、地图与导览；演示与验收「功能完整」 |
-| [`harmonyos-native/`](harmonyos-native/README.md) | **纯 ArkTS/ArkUI 原生**：`Canvas` 绘制 + 自研采样/触发引擎 | 要「原生鸿蒙开发」、轻量高性能、便于二次开发；HAP 约 300 KB |
+| `SBQ_HOST` | `127.0.0.1` | 后端监听地址 |
+| `SBQ_API_PORT` | `3000` | 后端端口；开发代理也读取此值 |
+| `SBQ_DB_PATH` | `server/data/oscilloscope.sqlite` | 数据库文件路径 |
 
-`harmonyos-native/` 把采样、触发、栅格、辉光与 OSD 全部用 `.ets` 重写，不加载任何网页；
-两套实现共用同一套波形数学（采样点、触发相位、时基换算），波形细节一致。
+启动后端会执行数据库结构迁移。升级真实数据库前应备份；默认数据库可使用：
 
-## 页面说明
+```bash
+node server/backup-db.js
+```
 
-| 页面 | 模板 | 产物 | 说明 |
-| --- | --- | --- | --- |
-| 登录 / 注册 | `public/login.html` | `login.html` | 自包含静态页，用户登录与注册 |
-| 面板 / 示波器 | `public/external.html` | `index.html` | 2D 波形操作面板（Vue 2） |
-| 内部原理 | `public/internal.html` | `internal.html` | 三维 CRT 原理演示（Three.js） |
+自定义数据库使用 `node server/backup-db.js <source.sqlite> [backup.sqlite]`。备份脚本使用 SQLite 一致性快照；同步版本、幂等、冲突和墓碑规则见[同步协议与迁移说明](server/SYNC_PROTOCOL.md)，接口配置见[后端说明](server/README.md)。
 
-两个主页面由 HtmlWebpackPlugin 从 `public/` 下的模板生成；页面右上角的切换控件可在「外部（面板 / 示波器）」与「内部原理」之间跳转。
+完整账号功能需要持续运行后端，并保留数据库磁盘。GitHub Pages 等静态托管只能提供静态体验，不能运行这里的账号与实验 API。
 
-> 提示：VR 寻波功能依赖百度地图 API，需要联网才能正常加载地图。
+## 代码入口
 
-## 登录与用户系统
+```text
+harmonyos-native/           ArkTS / ArkUI 原生主工程
+  entry/src/main/ets/
+    pages/                 登录、示波器与记录界面
+    model/                 波形数学、采样与触发
+    view/                  Canvas 绘制及控件
+    service/               会话、本机存储、草稿、实验与同步
+harmonyos/                 ArkWeb 补充工程
+src/                       Web 界面与三维场景
+public/                    HTML 模板与静态资源
+scripts/                   Web 波形、校准及知识库逻辑
+server/                    HTTP API、SQLite、迁移及逻辑测试
+shared/                    实验参数格式与校验
+packaging/                 Web、Electron、HarmonyOS 构建工具
+docs/                      生成的 Web 产物
+NEXT_TASKS.md              后续任务与历史进度
+```
 
-现在使用真实后端账号与 SQLite 持久化，详细配置见 [server/README.md](server/README.md)。
+## 常用命令
 
-1. 在登录页注册账号（密码 8–128 位）并登录。
-2. 调整波形，点击页头「我的实验」，填写标题与备注，点击「保存当前实验」。
-3. 下次登录后打开「我的实验」，点击「恢复参数」即可继续，也可以删除旧记录。
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev:full` | 同时启动后端与 Web 开发服务器 |
+| `npm run dev` / `npm run server` | 分别启动 Web 开发服务器 / 后端 |
+| `npm run build` | 构建 Web 到 `docs/` |
+| `npm run harmonyos:native:build` | 构建原生 HarmonyOS 工程 |
+| `npm run build:harmonyos` / `npm run harmonyos:build` | 依次准备 Web 资源、打包 ArkWeb 工程 |
+| `npm run electron` | 使用 Electron 打开已有 Web 产物 |
+| `npm run dist` | 构建并打包当前平台桌面程序 |
+| `npm test` | 运行平台、地图及后端 / 原生服务逻辑测试 |
+| `npm run test:user-data` / `npm run test:smoke` | Web 账号流程 / Electron 冒烟检查 |
 
-保存内容包括双通道参数、波形类型、时基、电压、相位、触发和校准设置。图片原文件、地图位置、AI 对话和 3D 场景暂不保存。每个账号最多保存 500 条实验，保存采用手动快照，不自动覆盖旧记录。
+## 当前限制与贡献方式
 
-密码通过 scrypt 加盐哈希存储；会话在 7 天后过期，退出登录会撤销当前会话。接口只允许访问当前用户的实验。游客仍可体验所有仿真页面，但不能保存实验。旧版浏览器 Mock 账号不会自动迁入数据库，需要重新注册。
+- `deve` 是当前开发与协作验证分支；新贡献从该分支开始，Pull Request 以 `deve` 为目标。主分支合并等待验证结果。
+- 电脑侧服务测试包含 ArkTS 源码剥类型、平台替身和临时 SQLite；它们不能替代 DevEco 编译或鸿蒙设备测试。当前同步改动的交接见[贡献者验证清单](harmonyos-native/CONTRIBUTOR_TESTING.md)。
+- 后台自动同步、数据库更换或回滚后的游标重新协商、密码修改与会话管理尚待完成；邮件 / 短信找回密码尚无发送通道。
+- 系统文件选择器、软键盘、小屏布局、触控及实际网络切换仍需设备验证。请在反馈中附上分支、提交号、设备 / 系统版本和复现步骤。
+- 不要提交数据库、账号令牌、签名证书或私钥。后续安排见[任务单](NEXT_TASKS.md)，其中末尾的最新记录优先于早期计划。
 
-数据库默认位于 `server/data/oscilloscope.sqlite`，不进入 Git。关闭服务后备份整个 `server/data/` 文件夹即可保留账号与实验；再次启动仍能读取已有数据。
-
-## 部署
-
-`npm run build` 将网页输出到 `docs/`。账号与保存功能需要运行 `npm run server`，由同一个地址提供网页和 `/api`。对公网部署时使用 HTTPS 反向代理并保留原始 Host；数据库目录需使用持久化磁盘。
-
-GitHub Pages 只能提供静态游客体验，不能运行此后端或保存账号实验。若只部署静态体验：进入仓库 **Settings → Pages**，将 Source 设为 `master` 分支的 `/docs` 目录即可。
-
-## 参与贡献
-
-1. Fork 本仓库
-2. 新建 `Feat_xxx` 分支
-3. 提交代码
-4. 新建 Pull Request
-
-## 多语言
-
-- 简体中文（本文件）
-- [English](Readme_en.md)
+这三个 README 提供简体中文、英文和繁体中文的项目说明；应用界面目前主要使用简体中文。
