@@ -353,7 +353,7 @@ struct ScopePage {
         return;
       }
       const filesDir: string = (context as common.UIAbilityContext).filesDir;
-      const outcome: SyncOutcome = await SyncService.syncAll(filesDir, this.draftServer(),
+      const outcome: SyncOutcome = await SyncService.syncBoth(filesDir, this.draftServer(),
         this.draftUserId(), token);
       this.localMessage = outcome.message;
       this.loadLocalRecords();
@@ -761,7 +761,7 @@ struct ScopePage {
           .onChange((value: string) => { this.localNotes = value; })
         Button('存为本机记录').width('100%').onClick(() => { this.saveLocalRecord(); })
         Row({ space: 8 }) {
-          Button(this.localBusy ? '同步中…' : '同步到服务器')
+          Button(this.localBusy ? '同步中…' : '手动同步')
             .layoutWeight(1)
             .enabled(!this.localBusy && this.loggedIn)
             .onClick(() => { this.syncLocalRecords(); })
@@ -778,10 +778,9 @@ struct ScopePage {
         if (!this.loggedIn) {
           Text('游客记录不能同步，登录后可用。').fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
         }
-        // 明确的边界说明：只推不拉，避免被当成"完整同步"
-        Text('同步方向：仅把本机记录推到服务器。不会从服务器拉取变更，' +
-          '换设备看不到别处修改，因此还不是完整双向同步。')
-          .fontColor('#ffb74d').fontSize(10).width('100%')
+        Text('手动同步：先推送本机修改，再拉取其他设备的变更与删除。冲突保留副本，' +
+          '副本将在下次点击同步时上传；不会自动联网同步。')
+          .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
         Text(this.localMessage).fontColor('#d5e6dc').fontSize(12).width('100%')
         ForEach(this.localRecords, (record: LocalRecord) => {
           Column({ space: 6 }) {

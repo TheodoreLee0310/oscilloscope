@@ -38,6 +38,7 @@ function createServer(options = {}) {
     ['updated_at', 'TEXT'],
     ['deleted', 'INTEGER NOT NULL DEFAULT 0'],
     ['last_op_id', 'TEXT'],
+    ['change_seq', 'INTEGER NOT NULL DEFAULT 0'],
   ]) {
     if (!experimentColumns.includes(name)) db.exec(`ALTER TABLE experiments ADD COLUMN ${name} ${ddl}`);
   }
@@ -49,6 +50,22 @@ function createServer(options = {}) {
       response TEXT NOT NULL,
       created_at TEXT NOT NULL,
       PRIMARY KEY (user_id, operation_id));`);
+  // A persisted logical clock covers every write path, including legacy HTTP/import APIs.
+  // Triggers only observe business columns: updating change_seq cannot trigger them again.
+  db.exec(`CREATE TABLE IF NOT EXISTS sync_clock (id INTEGER PRIMARY KEY CHECK(id=1), value INTEGER NOT NULL);
+    INSERT OR IGNORE INTO sync_clock VALUES(1,0);
+    CREATE TRIGGER IF NOT EXISTS experiments_change_insert AFTER INSERT ON experiments BEGIN
+      UPDATE sync_clock SET value=value+1 WHERE id=1;
+      UPDATE experiments SET change_seq=(SELECT value FROM sync_clock WHERE id=1) WHERE id=NEW.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS experiments_change_update
+    AFTER UPDATE OF title,notes,state,deleted,rev ON experiments BEGIN
+      UPDATE sync_clock SET value=value+1 WHERE id=1;
+      UPDATE experiments SET change_seq=(SELECT value FROM sync_clock WHERE id=1) WHERE id=NEW.id;
+    END;
+    CREATE INDEX IF NOT EXISTS experiments_changes ON experiments(user_id,change_seq);`);
+  // Bootstrap existing rows without altering their revision or business data.
+  db.exec('UPDATE experiments SET rev=rev WHERE change_seq=0');
   // 幂等记录只保留 7 天，避免无限增长
   db.prepare('DELETE FROM sync_operations WHERE created_at < ?')
     .run(new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());
@@ -108,13 +125,16 @@ function createServer(options = {}) {
     try { stateVersion = JSON.parse(row.state).version || 0; } catch (_) { stateVersion = 0; }
     return {
       id: row.id,
-      clientId: row.client_id,
+      clientId: row.client_id || ('legacy-' + row.id),
       title: row.title,
       notes: row.notes,
       rev: row.rev,
       updatedAt: row.updated_at,
       deleted: row.deleted === 1,
       stateVersion,
+      state: JSON.parse(row.state),
+      createdAt: row.created_at,
+      changeSeq: row.change_seq,
     };
   }
 
@@ -138,12 +158,12 @@ function createServer(options = {}) {
     const now = new Date().toISOString();
     db.exec('BEGIN IMMEDIATE');
     try {
-      const row = db.prepare('SELECT * FROM experiments WHERE user_id=? AND client_id=?').get(user.id, clientId);
+      const row = db.prepare("SELECT * FROM experiments WHERE user_id=? AND (client_id=? OR (client_id IS NULL AND ?='legacy-'||id))").get(user.id, clientId, clientId);
       let outcome;
       if (type === 'create') {
         if (row) {
           // (user_id, client_id) 已存在：重复创建被吸收，不新增行
-          outcome = { status: 'applied', created: false, item: syncItem(row) };
+          outcome = { status: row.deleted ? 'deleted' : 'applied', created: false, item: syncItem(row) };
         } else {
           const title = checkSyncTitle(input.title);
           const notes = checkSyncNotes(input.notes);
@@ -263,6 +283,25 @@ function createServer(options = {}) {
           return json(res, 200, { ok: true });
         }
         // 同步协议入口：一次只处理一个操作，客户端用稳定 operationId 重试
+        if (req.method === 'GET' && route === '/api/sync/changes') {
+          const integer = (name, fallback, max = Number.MAX_SAFE_INTEGER) => {
+            const value = url.searchParams.get(name);
+            if (value === null) return fallback;
+            if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) > max) throw failure(400, name + ' 参数不正确');
+            return Number(value);
+          };
+          const cursor = integer('cursor', 0);
+          const limit = integer('limit', 100, 200);
+          const clock = db.prepare('SELECT value FROM sync_clock WHERE id=1').get().value;
+          const until = integer('until', clock);
+          if (limit < 1 || until > clock || cursor > until) throw failure(400, '游标或分页范围不正确');
+          const rows = db.prepare(`SELECT * FROM experiments WHERE user_id=? AND change_seq>? AND change_seq<=?
+            ORDER BY change_seq LIMIT ?`).all(user.id, cursor, until, limit + 1);
+          const hasMore = rows.length > limit;
+          const page = rows.slice(0, limit);
+          return json(res, 200, { items: page.map(syncItem), until, hasMore,
+            nextCursor: hasMore ? page[page.length - 1].change_seq : until });
+        }
         if (req.method === 'POST' && route === '/api/sync/apply') {
           return json(res, 200, applySyncOperation(await body(req), user));
         }
@@ -358,8 +397,8 @@ function createServer(options = {}) {
             fields.push('notes=?'); values.push(data.notes);
           }
           if (fields.length === 0) throw failure(400, '请提供要修改的标题或备注');
-          const result = db.prepare(`UPDATE experiments SET ${fields.join(', ')} WHERE id=? AND user_id=?`)
-            .run(...values, match[1], user.id);
+          const result = db.prepare(`UPDATE experiments SET ${fields.join(', ')},rev=rev+1,updated_at=? WHERE id=? AND user_id=? AND deleted=0`)
+            .run(...values, new Date().toISOString(), match[1], user.id);
           if (result.changes === 0) throw failure(404, '实验记录不存在');
           const item = db.prepare(`SELECT id,title,notes,created_at AS createdAt,json_extract(state,'$.version') AS stateVersion
             FROM experiments WHERE id=?`).get(match[1]);
@@ -371,9 +410,12 @@ function createServer(options = {}) {
             FROM experiments WHERE id=? AND user_id=?`).get(match[1], user.id);
           if (!item) throw failure(404, '实验记录不存在');
           if (req.method === 'DELETE') {
-            db.prepare('DELETE FROM experiments WHERE id=? AND user_id=?').run(match[1], user.id);
+            db.prepare('UPDATE experiments SET deleted=1,rev=rev+1,updated_at=? WHERE id=? AND user_id=? AND deleted=0')
+              .run(new Date().toISOString(), match[1], user.id);
             return json(res, 200, { ok: true });
           }
+          if (item.deleted && url.searchParams.get('includeDeleted') !== '1') throw failure(404, '实验记录已删除');
+          item.clientId = item.clientId || ('legacy-' + item.id);
           item.state = JSON.parse(item.state);
           item.deleted = item.deleted === 1;
           return json(res, 200, { item });
