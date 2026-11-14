@@ -188,7 +188,7 @@
     })();
   </script>
 </head>
-<body>
+<body class="material-internal">
   <!-- Coze AI 助手：由「加载 3 次 + 无守卫」改为「单个脚本 + 可用性守卫 + 失败静默降级」。
        原写法在任何一次 CDN 请求失败时都会抛 ReferenceError: CozeWebSDK is not defined，
        在离线环境或鸿蒙 ArkWeb（域名未放行）下会直接打断本页其他脚本。 -->

@@ -171,7 +171,7 @@
           window.location.replace('./login.html');
         }
       } catch (e) { /* localStorage 不可用时放行，避免白屏 */ }
-    })();</script><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script><link href="./css/internal.css" rel="stylesheet"></head><body><script>// 令牌与 botId 支持部署时注入：在页面里先声明 window.SBQ_COZE_CONFIG 即可覆盖。
+    })();</script><script defer="defer" src="./js/three.bundle.js"></script><script defer="defer" src="./js/vendors.bundle.js"></script><script defer="defer" src="./js/internal.bundle.js"></script><link href="./css/common.css" rel="stylesheet"></head><body class="material-internal"><script>// 令牌与 botId 支持部署时注入：在页面里先声明 window.SBQ_COZE_CONFIG 即可覆盖。
     // ⚠️ 安全提示：下面的 token 是已提交进公开仓库的 Coze PAT，等同于已泄露，
     //    请到 Coze 控制台吊销后改用注入方式，切勿继续在源码里硬编码。
     window.SBQ_COZE_CONFIG = window.SBQ_COZE_CONFIG || {

@@ -1,0 +1,437 @@
+/* Shared Material 3 palette for the browser and ArkWeb interfaces. */
+:root {
+  color-scheme: light;
+  --md-primary: #0b57d0;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #d3e3fd;
+  --md-on-primary-container: #0842a0;
+  --md-surface: #f0f4f9;
+  --md-surface-container: #ffffff;
+  --md-surface-variant: #e8edf5;
+  --md-on-surface: #1f1f1f;
+  --md-secondary: #444746;
+  --md-outline: #c4c7c5;
+  --md-error: #b3261e;
+  --md-error-container: #f9dedc;
+  --md-font: 'Roboto', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+}
+
+body.material-app,
+body.material-login,
+body.material-internal {
+  margin: 0;
+  box-sizing: border-box;
+  font-family: var(--md-font);
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+.material-app *,
+.material-login * { box-sizing: border-box; }
+
+.material-app button,
+.material-login button {
+  min-height: 40px;
+  margin: 0;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+  font: 500 14px/1.4 var(--md-font);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color .16s, box-shadow .16s;
+}
+
+.material-app button:hover:not(:disabled),
+.material-login button:hover:not(:disabled) {
+  background: #0842a0;
+  box-shadow: 0 1px 3px #1f1f1f26;
+  transform: none;
+}
+
+.material-app button:disabled,
+.material-login button:disabled {
+  background: #e3e3e3;
+  color: #747775;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.material-app :is(button, input, textarea, a):focus-visible,
+.material-login :is(button, input, a):focus-visible {
+  outline: 3px solid var(--md-primary);
+  outline-offset: 3px;
+}
+
+.material-app input:not([type='checkbox']):not([type='range']),
+.material-app textarea,
+.material-login input {
+  min-height: 40px;
+  border: 1px solid var(--md-outline);
+  border-radius: 10px;
+  background: #f8fafd;
+  color: var(--md-on-surface);
+  padding: 8px 10px;
+  font: 14px/1.5 var(--md-font);
+  accent-color: var(--md-primary);
+}
+
+.material-app input:disabled {
+  color: #747775;
+  background: #e8eaed;
+}
+
+.material-app input[type='number'] { width: 76px; margin: 0; }
+.material-app a,
+.material-login a { color: var(--md-primary); }
+
+/* Application shell. */
+.material-app { overflow: hidden; }
+.material-app #app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+.material-app header {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 24px 12px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  text-align: left;
+}
+.material-app header h1 {
+  margin: 0 0 0 120px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -.5px;
+}
+.material-app .user-bar { position: static; gap: 12px; min-width: 0; }
+.material-app .user-name { color: var(--md-secondary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-app .user-bar .logout-btn {
+  border-color: var(--md-outline);
+  background: transparent;
+  color: var(--md-secondary);
+  padding: 8px 16px;
+  border-radius: 24px;
+}
+.material-app .user-bar .logout-btn:hover { background: var(--md-surface-variant); }
+.material-app .records-toggle { background: var(--md-primary-container); color: var(--md-on-primary-container); border: 0; }
+.material-app .exp-steps {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 4px;
+  background: var(--md-surface-variant);
+  border-radius: 28px;
+  width: fit-content;
+  max-width: 100%;
+}
+.material-app .exp-steps::after { display: none; }
+.material-app :is(.exp-steps, .display-mode-buttons, .wave-select, .mode-switch, .channel-control) button { border-radius: 24px; }
+.material-app .exp-steps button {
+  min-width: 124px;
+  padding: 10px 22px;
+  background: transparent;
+  color: var(--md-secondary);
+  font-size: 14px;
+}
+.material-app .exp-steps button.active { background: var(--md-primary-container); color: var(--md-on-primary-container); transform: none; }
+.material-app .exp-steps button:hover { background: #dce6f5; color: var(--md-on-primary-container); }
+.material-app main {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  gap: 20px;
+  padding: 8px 24px 24px;
+  align-items: stretch;
+}
+.material-app aside {
+  flex: 0 0 400px;
+  width: 400px;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 24px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline) transparent;
+}
+.material-app :is(.control-panel, .parameter-settings) { padding: 0; margin: 0; min-height: 0; background: transparent; box-shadow: none; }
+.material-app :is(.calibration-panel, .signal-source-section, .time-voltage-section, .trigger-section, .display-mode-switcher, .vrwave-panel, .imagewave-panel) {
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 20px;
+  border: 1px solid #dde3ea;
+  border-radius: 24px;
+  background: var(--md-surface-container);
+  box-shadow: none;
+}
+.material-app :is(h2, h3, h4, .section-label) { color: var(--md-on-surface); font-weight: 500; }
+.material-app aside :is(h2, h3, .section-label) { font-size: 16px; margin: 0 0 16px; padding: 0; border: 0; }
+.material-app aside h4 { font-size: 13px; margin: 16px 0 10px; color: var(--md-secondary); }
+.material-app .section-header { border: 0; margin: 0; padding: 0; }
+.material-app .signal-source-controls { display: block; }
+.material-app .wave-select { display: flex; flex-wrap: wrap; gap: 6px; }
+.material-app :is(.wave-select, .display-mode-buttons, .channel-control) button {
+  background: var(--md-surface);
+  color: var(--md-secondary);
+  border: 1px solid #dde3ea;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+.material-app :is(.wave-select, .display-mode-buttons) button.active { background: var(--md-primary-container); color: var(--md-on-primary-container); border-color: var(--md-primary-container); }
+.material-app .display-mode-buttons { gap: 6px; }
+.material-app .channel-control { gap: 8px; }
+.material-app .channel-control button { gap: 8px; }
+.material-app .calibration-info { border: 0; border-radius: 16px; background: var(--md-surface); padding: 16px; margin-bottom: 0; font-size: 13px; color: var(--md-secondary); }
+.material-app .parameter-control :is(th, td) { font-size: 13px; padding: 8px 4px; }
+.material-app .parameter-control th { font-weight: 500; color: var(--md-secondary); }
+.material-app .parameter-control input[type='number'] { width: 76px; }
+.material-app .phase-control { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.material-app :is(.reading-controls, .position-controls, .phase-control, .level-knob) button {
+  min-width: 32px;
+  min-height: 36px;
+  padding: 4px 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--md-surface-variant);
+  color: var(--md-on-primary-container);
+  font-size: 16px;
+}
+.material-app .time-voltage-section table { width: 100%; border-collapse: collapse; }
+.material-app .time-voltage-section td { padding: 8px 0; font-size: 13px; }
+.material-app .time-voltage-section td:first-child { width: 41%; }
+.material-app .control-group { width: auto; margin: 0; gap: 6px; flex-wrap: wrap; }
+.material-app .reading-controls { padding: 0; margin: 0; border: 0; gap: 4px; }
+.material-app .reading-controls input { width: 64px; padding: 6px 2px; }
+.material-app .position-controls { width: auto; gap: 4px; padding: 4px; margin: 0; border: 0; border-radius: 12px; background: var(--md-surface); }
+.material-app .position-controls span { margin: 0; font-size: 11px; }
+.material-app .position-controls .arrow-button { min-width: 28px; min-height: 32px; padding: 2px 6px; }
+.material-app .slider-container { width: 100%; padding: 12px 6px; margin: 0; border: 0; background: transparent; }
+.material-app .slider { width: 100%; height: 6px; border-radius: 8px; background: var(--md-primary-container); box-shadow: none; }
+.material-app .slider::after { width: 14px; height: 14px; top: -4px; left: calc(var(--slider-value, 0) * (100% - 14px)); transform: none; background: var(--md-primary); box-shadow: none; }
+.material-app .trigger-controls { gap: 12px; }
+.material-app .trigger-level { padding: 8px; gap: 6px; background: var(--md-surface); border-radius: 12px; flex-wrap: wrap; }
+.material-app .trigger-description { line-height: 1.7; }
+.material-app .level-track { background: var(--md-surface-variant); }
+.material-app .level-indicator { background: var(--md-primary); border-color: var(--md-primary); border-radius: 4px; }
+.material-app .level-slider { margin-left: 4px; }
+
+/* Waveform workspace and live readings. */
+.material-app .right-content-area {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  align-self: flex-start;
+  gap: 24px;
+  padding: 24px;
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--md-surface-container);
+  border: 1px solid #dde3ea;
+  border-radius: 28px;
+}
+.material-app .scope-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.material-app .scope-heading h2 { margin: 0; font-size: 22px; font-weight: 500; }
+.material-app .scope-heading p { margin: 8px 0 0; color: var(--md-secondary); font-size: 13px; }
+.material-app .scope-status { flex: none; display: flex; align-items: center; gap: 8px; color: #146c2e; background: #e3f1e5; border-radius: 20px; padding: 8px 12px; font-size: 12px; }
+.material-app .scope-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.material-app .scope-status.paused { background: var(--md-surface-variant); color: var(--md-secondary); }
+.material-app .oscilloscope { flex: none; width: 100%; max-height: none; border-radius: 16px; overflow: hidden; background: #020604; }
+.material-app .oscilloscope canvas { width: 100%; height: auto; aspect-ratio: 2 / 1; image-rendering: auto; }
+.material-app .scope-readings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.material-app .scope-reading { padding: 16px; border-radius: 16px; background: var(--md-surface); min-width: 0; }
+.material-app .scope-reading span { display: block; font-size: 12px; color: var(--md-secondary); margin-bottom: 8px; }
+.material-app .scope-reading strong { font-size: clamp(14px, 1.4vw, 22px); font-weight: 500; font-variant-numeric: tabular-nums; }
+.material-app .scope-reading.ch1 strong { color: var(--md-primary); }
+.material-app .scope-reading.ch2 strong { color: var(--md-error); }
+.material-app .scope-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.material-app .scope-actions .secondary { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+
+/* Records, image recognition, maps and assistant use the same surfaces. */
+.material-app .experiment-records { inset: 140px 24px 24px auto; width: min(720px, calc(100vw - 48px)); padding: 28px; border: 1px solid var(--md-outline); border-radius: 28px; color: var(--md-on-surface); box-shadow: 0 12px 48px #1f1f1f26; }
+.material-app .experiment-records button { border-radius: 24px; padding: 10px 18px; background: var(--md-primary-container); color: var(--md-on-primary-container); border-color: transparent; }
+.material-app .records-form button { background: var(--md-primary); color: var(--md-on-primary); }
+.material-app .records-list li { padding: 20px 0; }
+.material-app :is(.vrwave-description, .imagewave-description, .vrwave-match-desc) { color: var(--md-secondary); line-height: 1.7; }
+.material-app :is(.vrwave-btn, .imagewave-btn) { background: var(--md-primary); color: var(--md-on-primary); border-radius: 24px; }
+.material-app :is(.vrwave-location-info, .vrwave-terrain-info, .vrwave-matched-location, .analysis-result, .ai-result-card, .ai-channel-card, .ai-scope-params, .ai-prompt-display) { border: 0; border-radius: 16px; background: var(--md-surface); color: var(--md-on-surface); }
+.material-app .terrain-card { border: 1px solid var(--md-outline); border-radius: 16px; box-shadow: none; background: var(--md-surface-container); }
+.material-app .terrain-card.active { border-color: var(--md-primary); background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.material-app .upload-area { border: 2px dashed var(--md-outline); border-radius: 20px; background: var(--md-surface); }
+.material-app .upload-area:hover { border-color: var(--md-primary); background: #e8f0fe; }
+.material-app .ai-apply-btn { background: var(--md-primary) !important; border-radius: 24px !important; }
+.material-app .ai-chat-toggle { background: var(--md-primary-container); border-radius: 20px; box-shadow: 0 3px 12px #1f1f1f26; }
+.material-app .ai-chat-header { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.material-app :is(.chat-header-title, .chat-header-subtitle) { color: var(--md-on-primary-container); }
+.material-app .ai-chat-window { border: 1px solid var(--md-outline); border-radius: 24px; box-shadow: 0 8px 36px #1f1f1f26; }
+.material-app .message-user .message-text { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.material-app .chat-send-btn { background: var(--md-primary); }
+.material-app .quick-btn { color: var(--md-primary); background: var(--md-surface); }
+
+/* Standalone authentication page. */
+.material-login { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 32px 20px; }
+.material-login .card { width: min(480px, 100%); background: white; border: 1px solid #dde3ea; border-radius: 28px; overflow: hidden; }
+.material-login .brand { padding: 36px 36px 24px; text-align: left; }
+.material-login .brand h1 { margin: 0; font-size: 32px; font-weight: 500; letter-spacing: -1px; }
+.material-login .brand p { color: var(--md-secondary); font-size: 14px; margin: 10px 0 0; }
+.material-login .tabs { display: flex; gap: 8px; padding: 4px; margin: 0 36px; border-radius: 24px; background: var(--md-surface); }
+.material-login .tabs button { flex: 1; background: transparent; color: var(--md-secondary); border: 0; }
+.material-login .tabs button.active { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.material-login .body { padding: 28px 36px 20px; }
+.material-login .field { margin-bottom: 20px; }
+.material-login .field label { display: block; color: var(--md-secondary); font-size: 13px; margin-bottom: 8px; }
+.material-login .field input { width: 100%; min-height: 52px; padding: 12px 16px; }
+.material-login .btn { width: 100%; min-height: 48px; }
+.material-login .btn.guest { margin-top: 12px; border: 1px solid var(--md-outline); background: transparent; color: var(--md-primary); }
+.material-login .btn.guest:hover { background: var(--md-surface); }
+.material-login .tip { padding: 12px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 13px; }
+.material-login .tip.error { background: var(--md-error-container); color: var(--md-error); }
+.material-login .tip.ok { background: #e3f1e5; color: #146c2e; }
+.material-login .foot { padding: 0 36px 28px; color: var(--md-secondary); font-size: 12px; line-height: 1.7; }
+.material-login .hide { display: none; }
+
+/* Controls around the 3D teaching view. */
+.material-internal #info { box-sizing: border-box; padding: 20px 136px; height: auto; color: var(--md-on-surface); background: #f0f4f9f2; font: 14px/1.6 var(--md-font); }
+.material-internal .dg.main { border-radius: 16px; overflow: hidden; font-family: var(--md-font); box-shadow: 0 4px 20px #1f1f1f26; }
+.material-internal .dg :is(li:not(.folder), li.title, .close-button) { color: var(--md-on-surface); background: #f8fafd; text-shadow: none; border-color: #dde3ea; }
+.material-internal .dg li.title { background: var(--md-primary-container); }
+.material-internal .dg .c input { background: var(--md-surface-variant); color: var(--md-primary); }
+.material-internal .dg .c .slider { background: var(--md-surface-variant); }
+.material-internal .dg .c .slider-fg { background: var(--md-primary); }
+
+@media (max-width: 1100px) {
+  .material-app aside { flex-basis: 360px; width: 360px; }
+  .material-app :is(.calibration-panel, .signal-source-section, .time-voltage-section, .trigger-section, .display-mode-switcher, .vrwave-panel, .imagewave-panel) { padding: 16px; }
+  .material-app .right-content-area { gap: 20px; padding: 20px; }
+  .material-app .scope-reading { padding: 12px; }
+}
+@media (max-width: 900px) {
+  .material-app { overflow: auto; }
+  .material-app #app { height: auto; min-height: 100vh; min-height: 100dvh; }
+  .material-app header { padding: 16px; gap: 16px 8px; }
+  .material-app header h1 { margin-left: 108px; font-size: 21px; }
+  .material-app .user-name { display: none; }
+  .material-app main { flex-direction: column; padding: 4px 16px 24px; }
+  .material-app .right-content-area { order: -1; flex: none; width: 100%; max-height: none; overflow: visible; }
+  .material-app aside { flex: none; width: 100%; overflow: visible; }
+  .material-app .exp-steps { width: 100%; }
+  .material-app .exp-steps button { flex: 1; min-width: 0; padding: 10px 12px; }
+  .material-app .scope-reading strong { font-size: 18px; }
+  .material-app .experiment-records { inset: 140px 16px 16px; width: auto; }
+}
+@media (max-width: 540px) {
+  .material-app header { grid-template-columns: minmax(0, 1fr) auto; }
+  .material-app header h1 { font-size: 19px; }
+  .material-app .user-bar { grid-row: 2; grid-column: 2; justify-self: end; }
+  .material-app .exp-steps { grid-row: 3; gap: 2px; padding: 4px 2px; }
+  .material-app .exp-steps button { font-size: 12px; padding: 9px 6px; }
+  .material-app .records-toggle { padding: 8px 12px; }
+  .material-app .user-bar .logout-btn { min-height: 32px; font-size: 12px; padding: 4px 12px; }
+  .material-app .right-content-area { border-radius: 24px; padding: 16px; gap: 16px; }
+  .material-app .scope-heading h2 { font-size: 18px; }
+  .material-app .scope-readings { gap: 6px; }
+  .material-app .scope-reading { padding: 10px 8px; border-radius: 12px; }
+  .material-app .scope-reading strong { font-size: 13px; }
+  .material-app .scope-reading span { font-size: 11px; }
+  .material-app .experiment-records { inset: 190px 12px 12px; padding: 20px; }
+  .material-login { padding: 20px 16px; }
+  .material-login :is(.brand, .body) { padding-left: 24px; padding-right: 24px; }
+  .material-login .tabs { margin-left: 24px; margin-right: 24px; }
+  .material-internal #info { text-align: right; font-size: 12px; padding: 20px 16px 20px 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .material-app *, .material-login * { animation: none !important; transition: none !important; }
+}
+
+/* Static Material geometry around the working surfaces. */
+body.material-login,
+body.material-app { isolation: isolate; }
+.material-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.material-shape { position: absolute; display: block; }
+.material-shape-ring {
+  top: 16%;
+  left: clamp(-48px, 6vw, 120px);
+  width: 224px;
+  height: 224px;
+  border: 36px solid #d3e3fd;
+  border-radius: 50%;
+}
+.material-shape-corner {
+  top: 10%;
+  right: clamp(-38px, 7vw, 140px);
+  width: 168px;
+  height: 168px;
+  border-radius: 84px 84px 16px 84px;
+  background: #fcecc3;
+  transform: rotate(-12deg);
+}
+.material-shape-capsule {
+  right: 10%;
+  bottom: 8%;
+  width: 220px;
+  height: 96px;
+  border-radius: 48px;
+  background: #d9eedb;
+  transform: rotate(-35deg);
+}
+.material-shape-tile {
+  left: 16%;
+  bottom: 8%;
+  width: 112px;
+  height: 112px;
+  border-radius: 32px;
+  background: #f8ddd7;
+  transform: rotate(15deg);
+}
+.material-app header { background: transparent; }
+.material-app .material-shape-ring { top: -112px; left: 48%; }
+.material-app .material-shape-corner { top: 76px; right: 7%; }
+.material-app .material-shape-capsule { right: 26%; bottom: -48px; }
+.material-app .material-shape-tile { left: 3%; bottom: -40px; }
+@media (max-width: 600px) {
+  .material-backdrop .material-shape-ring {
+    width: 144px;
+    height: 144px;
+    border-width: 24px;
+    left: -48px;
+    top: -34px;
+  }
+  .material-backdrop .material-shape-corner {
+    width: 96px;
+    height: 96px;
+    border-radius: 48px 48px 10px 48px;
+    right: -20px;
+    top: 18px;
+  }
+  .material-backdrop .material-shape-capsule {
+    width: 144px;
+    height: 64px;
+    border-radius: 32px;
+    right: -40px;
+    bottom: -18px;
+  }
+  .material-backdrop .material-shape-tile {
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+    left: -16px;
+    bottom: -20px;
+  }
+}

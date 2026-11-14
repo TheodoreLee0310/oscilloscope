@@ -19,7 +19,7 @@ export class Palette {
   static readonly ON_ACCENT: string = '#FFFFFF';
   static readonly PRIMARY_CONTAINER: string = '#D3E3FD';
   static readonly ON_PRIMARY_CONTAINER: string = '#0842A0';
-  static readonly SURFACE: string = '#F8F9FA';
+  static readonly SURFACE: string = '#F0F4F9';
   static readonly ON_SURFACE: string = '#1F1F1F';
   static readonly PANEL: string = '#FFFFFF';
   static readonly PANEL_ITEM: string = '#E8EDF5';
@@ -34,6 +34,9 @@ export class Palette {
   static readonly CHANNEL_1: string = '#0B57D0';
   static readonly CHANNEL_2: string = '#B3261E';
   static readonly TRIGGER_CONTROL: string = '#146C2E';
+  static readonly DECOR_YELLOW: string = '#FCECC3';
+  static readonly DECOR_GREEN: string = '#D9EEDB';
+  static readonly DECOR_CORAL: string = '#F8DDD7';
 }
 
 /** 屏幕网格：水平 16 格、垂直 8 格，每格 5 细分 */

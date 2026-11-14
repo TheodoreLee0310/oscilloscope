@@ -30,10 +30,10 @@ export const OscilloscopeConstants = {
   COLORS: {
     CHANNEL_1: '#2196F3',    // 通道1颜色
     CHANNEL_2: '#FF5722',    // 通道2颜色
-    GRID: '#2a2a2a',        // 网格颜色
-    BACKGROUND: '#3980ab',   // 背景颜色（调整为深蓝，提升网格可读性）
-    AXES: '#3a3a3a',        // 坐标轴颜色
-    TEXT: '#909090'         // 文本颜色
+    GRID: '#29394a',        // 网格颜色
+    BACKGROUND: '#101c2a',   // 背景颜色（调整为深蓝，提升网格可读性）
+    AXES: '#466076',        // 坐标轴颜色
+    TEXT: '#a9b8ca'         // 文本颜色
   },
   
   // 波形相关常量

@@ -1,3 +1,4 @@
+import '../public/material-theme.css';
 // ===== 基础导入 =====
 import * as THREE from 'three'; // 三维库
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'; // 轨道控制器

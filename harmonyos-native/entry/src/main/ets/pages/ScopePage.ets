@@ -1,3 +1,4 @@
+import { MaterialBackdrop } from '../view/MaterialBackdrop';
 import { AuthService } from '../service/AuthService';
 import { ApiError } from '../service/ApiService';
 import { ExperimentPage, ExperimentService, ExperimentSummary, ImportOutcome } from '../service/ExperimentService';
@@ -1570,79 +1571,86 @@ struct ScopePage {
 
   build() {
     WithTheme({ colorMode: ThemeColorMode.LIGHT }) {
-      Column() {
-        this.topBar()
-        this.draftBar()
-
+      Stack({ alignContent: Alignment.TopStart }) {
+        MaterialBackdrop({ workspace: true })
         Column() {
-          Canvas(this.canvasCtx)
-            .width('100%')
-            .aspectRatio(Layout.ASPECT)
-            .constraintSize({ maxHeight: 280 })
-            .backgroundColor(Palette.BACKGROUND_OUT)
-            .borderRadius(24)
-            .clip(true)
-            .onReady(() => {
-              this.frame();
-            })
+          this.topBar()
+          this.draftBar()
+
+          Column() {
+            Canvas(this.canvasCtx)
+              .width('100%')
+              .aspectRatio(Layout.ASPECT)
+              .constraintSize({ maxHeight: 280 })
+              .backgroundColor(Palette.BACKGROUND_OUT)
+              .borderRadius(24)
+              .clip(true)
+              .onReady(() => {
+                this.frame();
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: 12 })
+
+          Tabs({ barPosition: BarPosition.Start }) {
+            TabContent() {
+              Scroll() {
+                Column() {
+                  this.modeRow()
+                  GridRow({ columns: 12, gutter: 12 }) {
+                    GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                      this.ch1Panel()
+                    }
+                    GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                      this.ch2Panel()
+                    }
+                    GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                      this.timebasePanel()
+                    }
+                    GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                      this.triggerPanel()
+                    }
+                  }
+                  Blank().height(24)
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16, top: 12 })
+              }
+              .scrollBar(BarState.Auto)
+              .align(Alignment.Top)
+            }.tabBar(new SubTabBarStyle('波形控制')
+              .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
+              .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
+            TabContent() {
+              Scroll() {
+                Column() {
+                  this.localRecordsPanel()
+                  this.recordsPanel()
+                  Blank().height(24)
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16, top: 12 })
+              }
+              .scrollBar(BarState.Auto)
+              .align(Alignment.Top)
+            }.tabBar(new SubTabBarStyle('实验记录')
+              .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
+              .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
+          }
+          .barMode(BarMode.Fixed)
+          .barHeight(48)
+          .divider({ strokeWidth: 1, color: Palette.OUTLINE_VARIANT })
+          .backgroundColor(Color.Transparent)
+          .layoutWeight(1)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, bottom: 12 })
-
-        Tabs({ barPosition: BarPosition.Start }) {
-          TabContent() {
-            Scroll() {
-              Column() {
-                this.modeRow()
-                GridRow({ columns: 12, gutter: 12 }) {
-                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
-                    this.ch1Panel()
-                  }
-                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
-                    this.ch2Panel()
-                  }
-                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
-                    this.timebasePanel()
-                  }
-                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
-                    this.triggerPanel()
-                  }
-                }
-                Blank().height(24)
-              }
-              .width('100%')
-              .padding({ left: 16, right: 16, top: 12 })
-            }
-            .scrollBar(BarState.Auto)
-            .align(Alignment.Top)
-          }.tabBar(new SubTabBarStyle('波形控制')
-            .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
-            .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
-          TabContent() {
-            Scroll() {
-              Column() {
-                this.localRecordsPanel()
-                this.recordsPanel()
-                Blank().height(24)
-              }
-              .width('100%')
-              .padding({ left: 16, right: 16, top: 12 })
-            }
-            .scrollBar(BarState.Auto)
-            .align(Alignment.Top)
-          }.tabBar(new SubTabBarStyle('实验记录')
-            .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
-            .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
-        }
-        .barMode(BarMode.Fixed)
-        .barHeight(48)
-        .divider({ strokeWidth: 1, color: Palette.OUTLINE_VARIANT })
-        .backgroundColor(Palette.SURFACE)
-        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(Color.Transparent)
       }
       .width('100%')
       .height('100%')
       .backgroundColor(Palette.SURFACE)
+      .clip(true)
     }
   }
 }

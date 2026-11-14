@@ -35,7 +35,13 @@
     })();
   </script>
 </head>
-<body>
+<body class="material-app">
+  <div class="material-backdrop" aria-hidden="true">
+    <span class="material-shape material-shape-ring"></span>
+    <span class="material-shape material-shape-corner"></span>
+    <span class="material-shape material-shape-capsule"></span>
+    <span class="material-shape material-shape-tile"></span>
+  </div>
   <!-- 整体应用容器 -->
   <div id="app">
     <!-- 页面标题 -->
@@ -44,10 +50,10 @@
       
       <!-- 实验步骤切换 -->
       <div class="exp-steps">
-        <button @click="setExpStep('calibration')" :class="{ active: expStep === 'calibration' }">1. 自检校准</button>
-        <button id="normal-mode-btn" @click="setExpStep('normal')" :class="{ active: expStep === 'normal' }">2. 标准测量</button>
-        <button @click="setExpStep('vrwave')" :class="{ active: expStep === 'vrwave' }">3. VR寻波</button>
-        <button @click="setExpStep('imagewave')" :class="{ active: expStep === 'imagewave' }">4. 图片识别</button>
+        <button @click="setExpStep('calibration')" :class="{ active: expStep === 'calibration' }">自检校准</button>
+        <button id="normal-mode-btn" @click="setExpStep('normal')" :class="{ active: expStep === 'normal' }">标准测量</button>
+        <button @click="setExpStep('vrwave')" :class="{ active: expStep === 'vrwave' }">VR寻波</button>
+        <button @click="setExpStep('imagewave')" :class="{ active: expStep === 'imagewave' }">图片识别</button>
       </div>
 
       <button class="records-toggle" @click="recordsOpen = !recordsOpen" :aria-expanded="String(recordsOpen)">我的实验</button>
@@ -603,7 +609,7 @@
   <table>
     <!-- ───────── 时间 (或 X 频率) ───────── -->
     <tr v-if="displayMode !== 'vertical'">
-      <td style="padding-left: 40px;">
+      <td>
         <label v-if="currentMode !== 'lissajous'" for="time-div">时间（s/div）</label>
         <label v-else for="time-div">X轴频率</label>
       </td>
@@ -650,7 +656,7 @@
 
     <!-- ───────── 电压 CH1 ───────── -->
     <tr>
-      <td style="padding-left:40px; white-space:nowrap;"><label for="volts-div-1">电压CH1（V/div）</label></td>
+      <td><label for="volts-div-1">电压CH1（V/div）</label></td>
       <td class="control-group">
         <div class="reading-controls">
           <button @click="adjustParam('voltsDiv',-0.1,1)">-</button>
@@ -691,7 +697,7 @@
 
     <!-- ───────── 电压 CH2 ───────── -->
     <tr>
-      <td style="padding-left:40px; white-space:nowrap;"><label for="volts-div-2">电压CH2（V/div）</label></td>
+      <td><label for="volts-div-2">电压CH2（V/div）</label></td>
       <td class="control-group">
         <div class="reading-controls">
           <button @click="adjustParam('voltsDiv',-0.1,2)">-</button>
@@ -732,7 +738,7 @@
 
     <!-- ───────── 水平位置 ───────── -->
     <tr>
-      <td style="padding-left:40px; white-space:nowrap;"><label for="horizontal-pos">水平位置</label></td>
+      <td><label for="horizontal-pos">水平位置</label></td>
       <td class="control-group" style="justify-content:center;">
         <div class="position-controls">
           <button @click="adjustPosition('horizontal',-0.1)" class="arrow-button">&#8592;</button>
@@ -745,7 +751,7 @@
 
     <!-- ───────── 垂直位置（合并）───────── -->
     <tr>
-      <td style="padding-left:40px; white-space:nowrap;"><label>垂直位置</label></td>
+      <td><label>垂直位置</label></td>
       <td class="control-group" style="justify-content:space-around;">
         <!-- CH1 -->
         <div class="position-controls">
@@ -814,6 +820,13 @@
 
       <!-- 右侧内容区 -->
       <div class="right-content-area">
+        <div class="scope-heading">
+          <div>
+            <h2>波形显示</h2>
+            <p>{{ expStep === 'calibration' ? '自检校准' : (displayMode === 'vertical' ? '李萨如图形' : (displayMode === 'overlay' ? '同向叠加' : '双通道独立显示')) }}</p>
+          </div>
+          <span class="scope-status" :class="{ paused: !isRunning }" role="status">{{ isRunning ? '采集中' : '已暂停' }}</span>
+        </div>
         <!-- 示波器显示区 -->
         <section class="oscilloscope">
           <!-- 独立图片显示区域 - 图片识别模式 -->
@@ -844,6 +857,15 @@
           </div>
           <canvas ref="oscilloscope" width="800" height="400"></canvas>
         </section>
+        <div class="scope-readings">
+          <div class="scope-reading"><span>{{ displayMode === 'vertical' ? 'X轴频率' : '水平时基' }}</span><strong>{{ displayMode === 'vertical' ? freqX + ' Hz' : timeDiv + ' s/div' }}</strong></div>
+          <div class="scope-reading ch1"><span>通道 1</span><strong>{{ voltsDiv[1] }} V/div</strong></div>
+          <div class="scope-reading ch2"><span>通道 2</span><strong>{{ voltsDiv[2] }} V/div</strong></div>
+        </div>
+        <div class="scope-actions">
+          <button @click="toggleRunning">{{ isRunning ? '暂停采集' : '继续采集' }}</button>
+          <button class="secondary" @click="resetTrigger">重置触发电平</button>
+        </div>
       </div>
     </main>
 

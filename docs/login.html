@@ -8,39 +8,15 @@
     此页为「自包含静态页」：样式与脚本全部内联，由 public/ 静态目录直接提供。
     注册与登录通过同源 /api 接口访问后端。
   -->
-  <style>
-    html, body { margin: 0; height: 100%; font-family: Arial, 'Microsoft YaHei', sans-serif; }
-    body { background: linear-gradient(135deg, #1b2a3a 0%, #2c3e50 60%, #22303f 100%);
-           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .card { width: 380px; max-width: 92vw; background: #fff; border-radius: 10px;
-            box-shadow: 0 12px 32px rgba(0,0,0,.35); overflow: hidden; }
-    .brand { background: #2c3e50; color: #fff; text-align: center; padding: 22px 16px 18px; }
-    .brand h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
-    .brand p { margin: 6px 0 0; font-size: 12px; color: #9fb3c8; }
-    .tabs { display: flex; border-bottom: 1px solid #eee; }
-    .tabs button { flex: 1; padding: 12px 0; border: 0; background: none; cursor: pointer;
-                   font-size: 15px; color: #7f8c9b; }
-    .tabs button.active { color: #2196F3; font-weight: bold; border-bottom: 2px solid #2196F3; }
-    .body { padding: 22px 24px 8px; }
-    .field { margin-bottom: 16px; }
-    .field label { display: block; font-size: 13px; color: #34495e; margin-bottom: 6px; }
-    .field input { width: 100%; box-sizing: border-box; padding: 10px 12px;
-                   border: 1px solid #dfe6ec; border-radius: 6px; font-size: 14px; outline: none; }
-    .field input:focus { border-color: #2196F3; }
-    .btn { width: 100%; padding: 11px 0; border: 0; border-radius: 6px; cursor: pointer;
-           background: #2196F3; color: #fff; font-size: 15px; letter-spacing: 1px; }
-    .btn:hover { background: #1976d2; }
-    .btn:disabled { background: #9cc7ec; cursor: not-allowed; }
-    .btn.guest { margin-top: 10px; background: #607d8b; font-size: 14px; }
-    .btn.guest:hover { background: #4b5f6b; }
-    .tip { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; margin-bottom: 14px; }
-    .tip.error { background: #fdecea; color: #c0392b; }
-    .tip.ok { background: #e8f5e9; color: #2e7d32; }
-    .foot { text-align: center; font-size: 12px; color: #9aa7b4; padding: 4px 24px 18px; }
-    .hide { display: none; }
-  </style>
+  <link rel="stylesheet" href="./material-theme.css" />
 </head>
-<body>
+<body class="material-login">
+  <div class="material-backdrop" aria-hidden="true">
+    <span class="material-shape material-shape-ring"></span>
+    <span class="material-shape material-shape-corner"></span>
+    <span class="material-shape material-shape-capsule"></span>
+    <span class="material-shape material-shape-tile"></span>
+  </div>
   <div class="card">
     <div class="brand">
       <h1>智波助梦</h1>

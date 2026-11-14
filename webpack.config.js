@@ -81,6 +81,7 @@ module.exports = {
         { from: path.resolve(__dirname, 'public/styles.css'), to: 'css/styles.css' },
         // 登录页：必须一并输出到构建产物，否则打包/发布后守卫跳转会 404
         { from: path.resolve(__dirname, 'public/login.html'), to: 'login.html' },
+        { from: path.resolve(__dirname, 'public/material-theme.css'), to: 'material-theme.css' },
         { from: path.resolve(__dirname, 'CDN'), to: 'assets/CDN' },
         // 迁移后的引导资源从 src/widgets/tour-guide 输出到 assets/TourGuide
         { from: path.resolve(__dirname, 'src/widgets/tour-guide/config.json'), to: 'assets/TourGuide/config.json' },

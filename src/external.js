@@ -6,6 +6,7 @@ import userData from './utils/user-data';
 
 // ===== 样式文件导入 =====
 import '../public/styles.css';
+import '../public/material-theme.css';
 
 // ===== 导入 switcher 模块（ES6 导入，并在 DOM 就绪后初始化） =====
 import { renderSwitcher } from '../src/widgets/switcher.js';
