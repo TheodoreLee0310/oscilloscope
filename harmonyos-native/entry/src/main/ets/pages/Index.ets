@@ -12,6 +12,7 @@ import { Palette } from '../common/ScopeConstants';
 @Entry
 @Component
 struct Index {
+  @State private backdropActive: boolean = false;
   @State server: string = AuthService.DEFAULT_SERVER;
   @State username: string = '';
   @State password: string = '';
@@ -140,6 +141,14 @@ struct Index {
     router.pushUrl({ url: 'pages/ScopePage' });
   }
 
+  onPageShow(): void {
+    this.backdropActive = true;
+  }
+
+  onPageHide(): void {
+    this.backdropActive = false;
+  }
+
   @Builder
   fieldLabel(text: string) {
     Text(text)
@@ -152,7 +161,7 @@ struct Index {
   build() {
     WithTheme({ colorMode: ThemeColorMode.LIGHT }) {
       Stack({ alignContent: Alignment.TopStart }) {
-        MaterialBackdrop({ workspace: false })
+        MaterialBackdrop({ workspace: false, active: this.backdropActive })
         Scroll() {
           Column() {
             Column() {

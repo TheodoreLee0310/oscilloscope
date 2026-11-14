@@ -26,6 +26,7 @@ const RECORD_PAGE_SIZE: number = 20;
 @Entry
 @Component
 struct ScopePage {
+  @State private backdropActive: boolean = false;
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private canvasCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   private renderer: ScopeRenderer = new ScopeRenderer(this.canvasCtx);
@@ -689,6 +690,14 @@ struct ScopePage {
       this.pendingDelete = ''; this.recordMessage = '已删除记录';
     } catch (error) { this.recordMessage = (error as Error).message; }
     finally { this.recordBusy = false; }
+  }
+
+  onPageShow(): void {
+    this.backdropActive = true;
+  }
+
+  onPageHide(): void {
+    this.backdropActive = false;
   }
 
   /** 草稿恢复提示条：仅在确实存在待恢复草稿时占位 */
@@ -1572,7 +1581,7 @@ struct ScopePage {
   build() {
     WithTheme({ colorMode: ThemeColorMode.LIGHT }) {
       Stack({ alignContent: Alignment.TopStart }) {
-        MaterialBackdrop({ workspace: true })
+        MaterialBackdrop({ workspace: true, active: this.backdropActive })
         Column() {
           this.topBar()
           this.draftBar()

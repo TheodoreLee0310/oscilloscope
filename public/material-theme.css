@@ -353,7 +353,7 @@ body.material-internal {
   .material-app *, .material-login * { animation: none !important; transition: none !important; }
 }
 
-/* Static Material geometry around the working surfaces. */
+/* Floating Material geometry around the working surfaces. */
 body.material-login,
 body.material-app { isolation: isolate; }
 .material-backdrop {
@@ -364,8 +364,17 @@ body.material-app { isolation: isolate; }
   pointer-events: none;
   user-select: none;
 }
-.material-shape { position: absolute; display: block; }
+.material-shape {
+  position: absolute;
+  display: block;
+  --material-motion-scale: 1;
+  animation-timing-function: ease-in-out;
+  animation-direction: alternate;
+  animation-iteration-count: infinite;
+}
 .material-shape-ring {
+  animation-name: material-ring-drift;
+  animation-duration: 9s;
   top: 16%;
   left: clamp(-48px, 6vw, 120px);
   width: 224px;
@@ -374,6 +383,8 @@ body.material-app { isolation: isolate; }
   border-radius: 50%;
 }
 .material-shape-corner {
+  animation-name: material-corner-drift;
+  animation-duration: 11s;
   top: 10%;
   right: clamp(-38px, 7vw, 140px);
   width: 168px;
@@ -383,6 +394,8 @@ body.material-app { isolation: isolate; }
   transform: rotate(-12deg);
 }
 .material-shape-capsule {
+  animation-name: material-capsule-drift;
+  animation-duration: 13s;
   right: 10%;
   bottom: 8%;
   width: 220px;
@@ -392,6 +405,8 @@ body.material-app { isolation: isolate; }
   transform: rotate(-35deg);
 }
 .material-shape-tile {
+  animation-name: material-tile-drift;
+  animation-duration: 10s;
   left: 16%;
   bottom: 8%;
   width: 112px;
@@ -406,6 +421,7 @@ body.material-app { isolation: isolate; }
 .material-app .material-shape-capsule { right: 26%; bottom: -48px; }
 .material-app .material-shape-tile { left: 3%; bottom: -40px; }
 @media (max-width: 600px) {
+  .material-shape { --material-motion-scale: 0.6; }
   .material-backdrop .material-shape-ring {
     width: 144px;
     height: 144px;
@@ -434,4 +450,21 @@ body.material-app { isolation: isolate; }
     left: -16px;
     bottom: -20px;
   }
+}
+
+@keyframes material-ring-drift {
+  from { transform: translate3d(calc(-12px * var(--material-motion-scale)), calc(10px * var(--material-motion-scale)), 0) rotate(-4deg); }
+  to { transform: translate3d(calc(20px * var(--material-motion-scale)), calc(-18px * var(--material-motion-scale)), 0) rotate(8deg); }
+}
+@keyframes material-corner-drift {
+  from { transform: translate3d(calc(8px * var(--material-motion-scale)), calc(-8px * var(--material-motion-scale)), 0) rotate(-16deg); }
+  to { transform: translate3d(calc(-18px * var(--material-motion-scale)), calc(18px * var(--material-motion-scale)), 0) rotate(-6deg); }
+}
+@keyframes material-capsule-drift {
+  from { transform: translate3d(calc(-12px * var(--material-motion-scale)), calc(8px * var(--material-motion-scale)), 0) rotate(-39deg); }
+  to { transform: translate3d(calc(18px * var(--material-motion-scale)), calc(-14px * var(--material-motion-scale)), 0) rotate(-29deg); }
+}
+@keyframes material-tile-drift {
+  from { transform: translate3d(calc(10px * var(--material-motion-scale)), calc(-10px * var(--material-motion-scale)), 0) rotate(11deg); }
+  to { transform: translate3d(calc(-14px * var(--material-motion-scale)), calc(14px * var(--material-motion-scale)), 0) rotate(21deg); }
 }
