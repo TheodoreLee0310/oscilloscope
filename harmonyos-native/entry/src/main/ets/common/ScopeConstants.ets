@@ -14,10 +14,26 @@ export class Palette {
   static readonly CH2: string = '#FF5722';
   static readonly OVERLAY: string = '#00E676';
   static readonly TRIGGER: string = '#FFEB3B';
-  static readonly ACCENT: string = '#2196F3';
-  static readonly PANEL: string = '#0e1a22';
-  static readonly PANEL_ITEM: string = '#20303c';
-  static readonly PANEL_TEXT: string = '#9aa7b3';
+  // Material 3 light surfaces and accessible control colors.
+  static readonly ACCENT: string = '#0B57D0';
+  static readonly ON_ACCENT: string = '#FFFFFF';
+  static readonly PRIMARY_CONTAINER: string = '#D3E3FD';
+  static readonly ON_PRIMARY_CONTAINER: string = '#0842A0';
+  static readonly SURFACE: string = '#F8F9FA';
+  static readonly ON_SURFACE: string = '#1F1F1F';
+  static readonly PANEL: string = '#FFFFFF';
+  static readonly PANEL_ITEM: string = '#E8EDF5';
+  static readonly PANEL_TEXT: string = '#444746';
+  static readonly FIELD: string = '#F0F4F9';
+  static readonly OUTLINE: string = '#747775';
+  static readonly OUTLINE_VARIANT: string = '#C4C7C5';
+  static readonly ERROR: string = '#B3261E';
+  static readonly ERROR_CONTAINER: string = '#F9DEDC';
+  static readonly WARNING: string = '#6D4C00';
+  static readonly WARNING_CONTAINER: string = '#FFF0C2';
+  static readonly CHANNEL_1: string = '#0B57D0';
+  static readonly CHANNEL_2: string = '#B3261E';
+  static readonly TRIGGER_CONTROL: string = '#146C2E';
 }
 
 /** 屏幕网格：水平 16 格、垂直 8 格，每格 5 细分 */

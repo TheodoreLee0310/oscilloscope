@@ -8,7 +8,7 @@ import { SessionService } from '../service/SessionService';
 import { common } from '@kit.AbilityKit';
 import { ImportItem, TransferSummary, classifyImport, containsSensitiveField } from '../service/ExperimentTransfer';
 import { ExportFiles, ExportFileInfo } from '../service/ExportFiles';
-import { router } from '@kit.ArkUI';
+import { LengthMetrics, router } from '@kit.ArkUI';
 import { Palette, Layout, Limits } from '../common/ScopeConstants';
 import { ScopeSetup, WaveOptions, WaveOption } from '../model/ScopeTypes';
 import { ScopeRenderer, ModeNames } from '../view/ScopeRenderer';
@@ -696,19 +696,28 @@ struct ScopePage {
     if (this.draftFound) {
       Row({ space: 8 }) {
         Column({ space: 2 }) {
-          Text('发现上次未保存的调参现场').fontColor('#e8f4ec').fontSize(12)
-          Text(this.draftSavedAtText).fontColor(Palette.PANEL_TEXT).fontSize(10)
+          Text('发现上次未保存的调参现场').fontColor(Palette.ON_SURFACE).fontSize(12)
+          Text(this.draftSavedAtText).fontColor(Palette.PANEL_TEXT).fontSize(12)
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Button('恢复').height(32).fontSize(12)
+        Button('恢复')
+          .borderRadius(20)
+          .backgroundColor(Palette.ACCENT)
+          .fontColor(Palette.ON_ACCENT)
+          .height(40)
+          .fontSize(14)
           .onClick(() => { this.applyDraft(); })
-        Button('删除').height(32).fontSize(12)
-          .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-          .border({ width: 1, color: '#25323d' })
+        Button('删除')
+          .borderRadius(20)
+          .height(40)
+          .fontSize(14)
+          .backgroundColor(Color.Transparent)
+          .fontColor(Palette.PANEL_TEXT)
+          .border({ width: 1, color: Palette.OUTLINE_VARIANT })
           .onClick(() => { this.discardDraft(); })
       }
       .width('100%')
       .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-      .backgroundColor('#12222c')
+      .backgroundColor(Palette.PRIMARY_CONTAINER)
     }
   }
 
@@ -717,9 +726,12 @@ struct ScopePage {
   localRecordsPanel() {
     Column({ space: 8 }) {
       Button(this.localOpen ? '收起本机记录' : '本机离线记录')
+        .height(40)
+        .fontSize(14)
+        .borderRadius(20)
         .width('100%')
-        .backgroundColor('#1d3a4a')
-        .fontColor('#dff1f7')
+        .backgroundColor(Palette.PRIMARY_CONTAINER)
+        .fontColor(Palette.ON_PRIMARY_CONTAINER)
         .onClick(() => {
           this.localOpen = !this.localOpen;
           if (this.localOpen) {
@@ -731,43 +743,83 @@ struct ScopePage {
       if (this.localOpen) {
         if (this.orphanNotice.length > 0) {
           Column({ space: 6 }) {
-            Text(this.orphanNotice).fontColor('#ffb74d').fontSize(11).width('100%')
-            Button('删除旧版残留').height(30).fontSize(11)
-              .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-              .border({ width: 1, color: '#25323d' })
+            Text(this.orphanNotice).fontColor(Palette.WARNING).fontSize(13).width('100%')
+            Button('删除旧版残留')
+              .borderRadius(20)
+              .height(40)
+              .fontSize(14)
+              .backgroundColor(Color.Transparent)
+              .fontColor(Palette.PANEL_TEXT)
+              .border({ width: 1, color: Palette.OUTLINE_VARIANT })
               .onClick(() => { this.discardOrphan(); })
-          }.width('100%').padding(8).backgroundColor('#211a12').borderRadius(8)
+          }.width('100%').padding(8).backgroundColor(Palette.WARNING_CONTAINER).borderRadius(8)
         }
         if (this.guestPrompt.length > 0) {
           Column({ space: 6 }) {
-            Text(this.guestPrompt).fontColor('#ffe0a3').fontSize(11).width('100%')
+            Text(this.guestPrompt).fontColor(Palette.WARNING).fontSize(13).width('100%')
             Row({ space: 8 }) {
-              Button('迁入当前账号').height(30).fontSize(11)
+              Button('迁入当前账号')
+                .borderRadius(20)
+                .backgroundColor(Palette.ACCENT)
+                .fontColor(Palette.ON_ACCENT)
+                .height(40)
+                .fontSize(14)
                 .onClick(() => { this.migrateGuestRecords(); })
-              Button('暂不迁入').height(30).fontSize(11)
-                .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-                .border({ width: 1, color: '#25323d' })
+              Button('暂不迁入')
+                .borderRadius(20)
+                .height(40)
+                .fontSize(14)
+                .backgroundColor(Color.Transparent)
+                .fontColor(Palette.PANEL_TEXT)
+                .border({ width: 1, color: Palette.OUTLINE_VARIANT })
                 .onClick(() => { this.dismissGuestPrompt(); })
             }
-          }.width('100%').padding(8).backgroundColor('#2a2416').borderRadius(8)
+          }.width('100%').padding(8).backgroundColor(Palette.WARNING_CONTAINER).borderRadius(8)
         }
         Text('记录只存在本机，联网不会自动上传；点「同步到服务器」才会手动推送。')
-          .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+          .fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
         TextInput({ text: this.localTitle, placeholder: '本机记录标题（必填）' })
-          .maxLength(80).width('100%')
+          .backgroundColor(Palette.FIELD)
+          .fontColor(Palette.ON_SURFACE)
+          .placeholderColor(Palette.PANEL_TEXT)
+          .borderRadius(12)
+          .maxLength(80)
+          .width('100%')
           .onChange((value: string) => { this.localTitle = value; })
         TextArea({ text: this.localNotes, placeholder: '备注（可选）' })
-          .maxLength(2000).height(56).width('100%')
+          .backgroundColor(Palette.FIELD)
+          .fontColor(Palette.ON_SURFACE)
+          .placeholderColor(Palette.PANEL_TEXT)
+          .borderRadius(12)
+          .maxLength(2000)
+          .height(56)
+          .width('100%')
           .onChange((value: string) => { this.localNotes = value; })
-        Button('存为本机记录').width('100%').onClick(() => { this.saveLocalRecord(); })
+        Button('存为本机记录')
+          .height(40)
+          .fontSize(14)
+          .borderRadius(20)
+          .backgroundColor(Palette.ACCENT)
+          .fontColor(Palette.ON_ACCENT)
+          .width('100%')
+          .onClick(() => { this.saveLocalRecord(); })
         Row({ space: 8 }) {
           Button(this.localBusy ? '同步中…' : '同步到服务器')
+            .height(40)
+            .fontSize(14)
+            .borderRadius(20)
+            .backgroundColor(Palette.ACCENT)
+            .fontColor(Palette.ON_ACCENT)
             .layoutWeight(1)
             .enabled(!this.localBusy && this.loggedIn)
             .onClick(() => { this.syncLocalRecords(); })
           Button('刷新')
-            .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-            .border({ width: 1, color: '#25323d' })
+            .height(40)
+            .fontSize(14)
+            .borderRadius(20)
+            .backgroundColor(Color.Transparent)
+            .fontColor(Palette.PANEL_TEXT)
+            .border({ width: 1, color: Palette.OUTLINE_VARIANT })
             .enabled(!this.localBusy)
             .onClick(() => {
               this.loadLocalRecords();
@@ -776,55 +828,91 @@ struct ScopePage {
             })
         }.width('100%')
         if (!this.loggedIn) {
-          Text('游客记录不能同步，登录后可用。').fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+          Text('游客记录不能同步，登录后可用。').fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
         }
         // 明确的边界说明：只推不拉，避免被当成"完整同步"
         Text('同步方向：仅把本机记录推到服务器。不会从服务器拉取变更，' +
           '换设备看不到别处修改，因此还不是完整双向同步。')
-          .fontColor('#ffb74d').fontSize(10).width('100%')
-        Text(this.localMessage).fontColor('#d5e6dc').fontSize(12).width('100%')
+          .fontColor(Palette.WARNING).fontSize(12).width('100%')
+        Text(this.localMessage).fontColor(Palette.ON_SURFACE).fontSize(12).width('100%')
         ForEach(this.localRecords, (record: LocalRecord) => {
           Column({ space: 6 }) {
             if (this.localEditingId === record.clientId) {
               TextInput({ text: this.localEditTitle, placeholder: '标题' })
-                .maxLength(80).width('100%')
+                .backgroundColor(Palette.FIELD)
+                .fontColor(Palette.ON_SURFACE)
+                .placeholderColor(Palette.PANEL_TEXT)
+                .borderRadius(12)
+                .maxLength(80)
+                .width('100%')
                 .onChange((value: string) => { this.localEditTitle = value; })
               TextArea({ text: this.localEditNotes, placeholder: '备注' })
-                .maxLength(2000).height(56).width('100%')
+                .backgroundColor(Palette.FIELD)
+                .fontColor(Palette.ON_SURFACE)
+                .placeholderColor(Palette.PANEL_TEXT)
+                .borderRadius(12)
+                .maxLength(2000)
+                .height(56)
+                .width('100%')
                 .onChange((value: string) => { this.localEditNotes = value; })
-              Row({ space: 8 }) {
-                Button('保存修改').onClick(() => { this.saveLocalEdit(record); })
+              Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+                Button('保存修改')
+                  .height(40)
+                  .fontSize(14)
+                  .borderRadius(20)
+                  .backgroundColor(Palette.ACCENT)
+                  .fontColor(Palette.ON_ACCENT)
+                  .onClick(() => { this.saveLocalEdit(record); })
                 Button('取消')
-                  .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-                  .border({ width: 1, color: '#25323d' })
+                  .height(40)
+                  .fontSize(14)
+                  .borderRadius(20)
+                  .backgroundColor(Color.Transparent)
+                  .fontColor(Palette.PANEL_TEXT)
+                  .border({ width: 1, color: Palette.OUTLINE_VARIANT })
                   .onClick(() => { this.cancelLocalEdit(); })
               }
             } else {
               Row({ space: 6 }) {
-                Text(record.title).fontColor('#ffffff').fontSize(13).layoutWeight(1)
-                Text(this.syncLabel(record.syncState)).fontColor('#8fd3ff').fontSize(10)
+                Text(record.title).fontColor(Palette.ON_SURFACE).fontSize(13).layoutWeight(1)
+                Text(this.syncLabel(record.syncState)).fontColor(Palette.ACCENT).fontSize(12)
               }.width('100%')
               Text('修订 ' + record.rev.toString() + ' · ' +
                 new Date(record.updatedAtMs).toLocaleString())
-                .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+                .fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
               if (record.conflictOfId.length > 0) {
                 Text('冲突副本 · 来源 ' + record.conflictOfId)
-                  .fontColor('#ffb74d').fontSize(10).width('100%')
+                  .fontColor(Palette.WARNING).fontSize(12).width('100%')
               }
               if (record.lastSyncResult.indexOf('failed') === 0) {
                 Text('上次同步失败：' + record.lastSyncResult)
-                  .fontColor('#ff8a80').fontSize(10).width('100%')
+                  .fontColor(Palette.ERROR).fontSize(12).width('100%')
               }
               if (record.notes.length > 0) {
                 Text(record.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
               }
-              Row({ space: 8 }) {
-                Button('恢复参数').onClick(() => { this.restoreLocalRecord(record); })
+              Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+                Button('恢复参数')
+                  .height(40)
+                  .fontSize(14)
+                  .borderRadius(20)
+                  .backgroundColor(Palette.ACCENT)
+                  .fontColor(Palette.ON_ACCENT)
+                  .onClick(() => { this.restoreLocalRecord(record); })
                 Button('编辑')
-                  .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-                  .border({ width: 1, color: '#25323d' })
+                  .height(40)
+                  .fontSize(14)
+                  .borderRadius(20)
+                  .backgroundColor(Color.Transparent)
+                  .fontColor(Palette.PANEL_TEXT)
+                  .border({ width: 1, color: Palette.OUTLINE_VARIANT })
                   .onClick(() => { this.startLocalEdit(record); })
                 Button(this.localPendingDelete === record.clientId ? '确认删除' : '删除')
+                  .height(40)
+                  .fontSize(14)
+                  .borderRadius(20)
+                  .backgroundColor(Palette.ACCENT)
+                  .fontColor(Palette.ON_ACCENT)
                   .onClick(() => {
                     if (this.localPendingDelete === record.clientId) {
                       this.deleteLocalRecord(record.clientId);
@@ -834,127 +922,265 @@ struct ScopePage {
                   })
                 if (this.localPendingDelete === record.clientId) {
                   Button('取消')
-                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .backgroundColor(Color.Transparent)
+                    .fontColor(Palette.PANEL_TEXT)
                     .onClick(() => { this.localPendingDelete = ''; })
                 }
               }
             }
-          }.width('100%').padding(10).backgroundColor(Palette.PANEL_ITEM).borderRadius(8)
+          }.width('100%').padding(16).backgroundColor(Palette.FIELD).borderRadius(16)
         }, (record: LocalRecord) => record.clientId)
       }
-    }.width('100%').padding({ bottom: 12 })
+    }.width('100%').padding(16).backgroundColor(Palette.PANEL).borderRadius(24).margin({ bottom: 12 })
   }
 
   @Builder
   recordsPanel() {
     Column({ space: 8 }) {
       Button(this.recordsOpen ? '收起我的实验' : '我的实验')
-        .width('100%').onClick(() => {
+        .height(40)
+        .fontSize(14)
+        .borderRadius(20)
+        .backgroundColor(Palette.ACCENT)
+        .fontColor(Palette.ON_ACCENT)
+        .width('100%')
+        .onClick(() => {
           this.recordsOpen = !this.recordsOpen;
           if (this.recordsOpen) this.loadRecords();
         })
       if (this.recordsOpen) {
         if (this.loggedIn) {
           TextInput({ text: this.recordTitle, placeholder: '实验标题（可选）' })
-            .maxLength(80).enabled(!this.recordBusy)
+            .backgroundColor(Palette.FIELD)
+            .fontColor(Palette.ON_SURFACE)
+            .placeholderColor(Palette.PANEL_TEXT)
+            .borderRadius(12)
+            .maxLength(80)
+            .enabled(!this.recordBusy)
             .onChange((value: string) => { this.recordTitle = value; })
           TextArea({ text: this.recordNotes, placeholder: '实验备注（可选）' })
-            .maxLength(2000).height(70).enabled(!this.recordBusy)
+            .backgroundColor(Palette.FIELD)
+            .fontColor(Palette.ON_SURFACE)
+            .placeholderColor(Palette.PANEL_TEXT)
+            .borderRadius(12)
+            .maxLength(2000)
+            .height(70)
+            .enabled(!this.recordBusy)
             .onChange((value: string) => { this.recordNotes = value; })
           Row({ space: 8 }) {
-            Button('保存当前实验').enabled(!this.recordBusy).onClick(() => { this.saveRecord(); })
-            Button('刷新记录').enabled(!this.recordBusy).onClick(() => { this.loadRecords(); })
+            Button('保存当前实验')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy)
+              .onClick(() => { this.saveRecord(); })
+            Button('刷新记录')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy)
+              .onClick(() => { this.loadRecords(); })
           }
           Row({ space: 8 }) {
             TextInput({ text: this.searchQuery, placeholder: '搜索标题或备注' })
-              .layoutWeight(1).height(36).enabled(!this.recordBusy)
+              .backgroundColor(Palette.FIELD)
+              .fontColor(Palette.ON_SURFACE)
+              .placeholderColor(Palette.PANEL_TEXT)
+              .borderRadius(12)
+              .layoutWeight(1)
+              .height(36)
+              .enabled(!this.recordBusy)
               .onChange((value: string) => { this.searchQuery = value; })
-            Button('搜索').height(36).enabled(!this.recordBusy)
+            Button('搜索')
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .height(36)
+              .enabled(!this.recordBusy)
               .onClick(() => { this.loadRecords(); })
-            Button('清空').height(36)
-              .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-              .border({ width: 1, color: '#25323d' }).enabled(!this.recordBusy)
+            Button('清空')
+              .fontSize(14)
+              .borderRadius(20)
+              .height(36)
+              .backgroundColor(Color.Transparent)
+              .fontColor(Palette.PANEL_TEXT)
+              .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+              .enabled(!this.recordBusy)
               .onClick(() => { this.resetSearch(); })
           }.width('100%')
-          Text(this.recordBusy ? '正在处理…' : this.recordMessage).fontColor('#d5e6dc').fontSize(12)
+          Text(this.recordBusy ? '正在处理…' : this.recordMessage).fontColor(Palette.ON_SURFACE).fontSize(12)
           if (this.recordTotal > 0) {
             Text('共 ' + this.recordTotal.toString() + ' 条，已加载 ' + this.records.length.toString() + ' 条')
-              .fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+              .fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
           }
           if (this.tokenExpired) {
             Text('登录已过期：本机草稿仍可离线使用，保存到云端前需重新登录。')
-              .fontColor('#ffb74d').fontSize(11).width('100%')
+              .fontColor(Palette.WARNING).fontSize(13).width('100%')
           }
           if (this.draftMessage.length > 0) {
-            Text(this.draftMessage).fontColor(Palette.PANEL_TEXT).fontSize(11).width('100%')
+            Text(this.draftMessage).fontColor(Palette.PANEL_TEXT).fontSize(13).width('100%')
           }
           ForEach(this.records, (item: ExperimentSummary) => {
             Column({ space: 6 }) {
               if (this.editingId === item.id) {
                 TextInput({ text: this.editTitle, placeholder: '实验标题（1–80 位）' })
-                  .maxLength(80).enabled(!this.recordBusy).width('100%')
+                  .backgroundColor(Palette.FIELD)
+                  .fontColor(Palette.ON_SURFACE)
+                  .placeholderColor(Palette.PANEL_TEXT)
+                  .borderRadius(12)
+                  .maxLength(80)
+                  .enabled(!this.recordBusy)
+                  .width('100%')
                   .onChange((value: string) => { this.editTitle = value; })
                 TextArea({ text: this.editNotes, placeholder: '实验备注（可选）' })
-                  .maxLength(2000).height(60).enabled(!this.recordBusy).width('100%')
+                  .backgroundColor(Palette.FIELD)
+                  .fontColor(Palette.ON_SURFACE)
+                  .placeholderColor(Palette.PANEL_TEXT)
+                  .borderRadius(12)
+                  .maxLength(2000)
+                  .height(60)
+                  .enabled(!this.recordBusy)
+                  .width('100%')
                   .onChange((value: string) => { this.editNotes = value; })
-                Row({ space: 8 }) {
-                  Button('保存修改').enabled(!this.recordBusy).onClick(() => { this.saveEdit(item.id); })
-                  Button('取消').enabled(!this.recordBusy)
-                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-                    .border({ width: 1, color: '#25323d' })
+                Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+                  Button('保存修改')
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .backgroundColor(Palette.ACCENT)
+                    .fontColor(Palette.ON_ACCENT)
+                    .enabled(!this.recordBusy)
+                    .onClick(() => { this.saveEdit(item.id); })
+                  Button('取消')
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .enabled(!this.recordBusy)
+                    .backgroundColor(Color.Transparent)
+                    .fontColor(Palette.PANEL_TEXT)
+                    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
                     .onClick(() => { this.cancelEdit(); })
                 }
               } else {
                 Text(item.title + (item.stateVersion === 2 ? ' · 原生' : ' · 网页'))
-                  .fontColor('#ffffff').width('100%')
-                Text(item.createdAt).fontColor(Palette.PANEL_TEXT).fontSize(10).width('100%')
+                  .fontColor(Palette.ON_SURFACE).width('100%')
+                Text(item.createdAt).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%')
                 if (item.notes.length > 0) { Text(item.notes).fontColor(Palette.PANEL_TEXT).fontSize(12).width('100%') }
-                Row({ space: 8 }) {
-                  Button('恢复参数').enabled(!this.recordBusy && item.stateVersion === 2)
+                Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+                  Button('恢复参数')
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .backgroundColor(Palette.ACCENT)
+                    .fontColor(Palette.ON_ACCENT)
+                    .enabled(!this.recordBusy && item.stateVersion === 2)
                     .onClick(() => { this.restoreRecord(item); })
-                  Button('编辑').enabled(!this.recordBusy)
-                    .backgroundColor(Color.Transparent).fontColor(Palette.PANEL_TEXT)
-                    .border({ width: 1, color: '#25323d' })
+                  Button('编辑')
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .enabled(!this.recordBusy)
+                    .backgroundColor(Color.Transparent)
+                    .fontColor(Palette.PANEL_TEXT)
+                    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
                     .onClick(() => { this.startEdit(item); })
-                  Button(this.pendingDelete === item.id ? '确认删除' : '删除').enabled(!this.recordBusy)
+                  Button(this.pendingDelete === item.id ? '确认删除' : '删除')
+                    .height(40)
+                    .fontSize(14)
+                    .borderRadius(20)
+                    .backgroundColor(Palette.ACCENT)
+                    .fontColor(Palette.ON_ACCENT)
+                    .enabled(!this.recordBusy)
                     .onClick(() => {
                       if (this.pendingDelete === item.id) this.deleteRecord(item.id);
                       else this.pendingDelete = item.id;
                     })
                   if (this.pendingDelete === item.id) {
-                    Button('取消').onClick(() => { this.pendingDelete = ''; })
+                    Button('取消')
+                      .height(40)
+                      .fontSize(14)
+                      .borderRadius(20)
+                      .backgroundColor(Palette.ACCENT)
+                      .fontColor(Palette.ON_ACCENT)
+                      .onClick(() => { this.pendingDelete = ''; })
                   }
                 }
               }
-            }.width('100%').padding(10).backgroundColor(Palette.PANEL_ITEM).borderRadius(8)
+            }.width('100%').padding(16).backgroundColor(Palette.FIELD).borderRadius(16)
           }, (item: ExperimentSummary) => item.id)
           if (this.recordHasMore) {
-            Button('加载更多').width('100%').enabled(!this.recordBusy)
+            Button('加载更多')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .width('100%')
+              .enabled(!this.recordBusy)
               .onClick(() => { this.loadMore(); })
           }
-          Divider().color('#25323d')
-          Text('导出 / 导入').fontColor('#e8f4ec').fontSize(12).width('100%')
+          Divider().color(Palette.OUTLINE_VARIANT)
+          Text('导出 / 导入').fontColor(Palette.ON_SURFACE).fontSize(12).width('100%')
           Row({ space: 8 }) {
-            Button('导出到文件').enabled(!this.recordBusy).onClick(() => { this.doExport(); })
-            Button('选最近导出').enabled(!this.recordBusy).onClick(() => { this.useLatestExport(); })
+            Button('导出到文件')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy)
+              .onClick(() => { this.doExport(); })
+            Button('选最近导出')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy)
+              .onClick(() => { this.useLatestExport(); })
           }
           TextInput({ text: this.importPath, placeholder: '导入文件路径（.json）' })
-            .enabled(!this.recordBusy).width('100%')
+            .backgroundColor(Palette.FIELD)
+            .fontColor(Palette.ON_SURFACE)
+            .placeholderColor(Palette.PANEL_TEXT)
+            .borderRadius(12)
+            .enabled(!this.recordBusy)
+            .width('100%')
             .onChange((value: string) => { this.importPath = value; })
           Row({ space: 8 }) {
-            Button('解析').enabled(!this.recordBusy)
+            Button('解析')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy)
               .onClick(() => { this.prepareImport(this.importPath); })
-            Button('确认导入').enabled(!this.recordBusy && this.pendingImportValid.length > 0)
+            Button('确认导入')
+              .height(40)
+              .fontSize(14)
+              .borderRadius(20)
+              .backgroundColor(Palette.ACCENT)
+              .fontColor(Palette.ON_ACCENT)
+              .enabled(!this.recordBusy && this.pendingImportValid.length > 0)
               .onClick(() => { this.confirmImport(); })
           }
           if (this.transferMessage.length > 0) {
-            Text(this.transferMessage).fontColor(Palette.PANEL_TEXT).fontSize(11).width('100%')
+            Text(this.transferMessage).fontColor(Palette.PANEL_TEXT).fontSize(13).width('100%')
           }
         } else {
           Text('游客不能保存实验，请退出并注册或登录账号。').fontColor(Palette.PANEL_TEXT).fontSize(12)
         }
       }
-    }.width('100%').padding({ bottom: 12 })
+    }.width('100%').padding(16).backgroundColor(Palette.PANEL).borderRadius(24).margin({ bottom: 12 })
   }
 
   // ---------------------------------------------------------------- UI 片段
@@ -968,14 +1194,14 @@ struct ScopePage {
         .fill(color)
         .radius(2)
       Text(text)
-        .fontSize(12)
+        .fontSize(16)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#d5e6dc')
+        .fontColor(Palette.ON_SURFACE)
         .margin({ left: 6 })
       Blank()
     }
     .width('100%')
-    .margin({ bottom: 6 })
+    .margin({ bottom: 12 })
   }
 
   @Builder
@@ -983,18 +1209,23 @@ struct ScopePage {
     Row() {
       ForEach(['dual', 'overlay', 'lissajous'], (mode: string) => {
         Button(ModeNames.label(mode))
-          .fontSize(12)
-          .height(30)
+          .borderRadius(20)
+          .fontSize(14)
+          .height(40)
           .layoutWeight(1)
           .margin(2)
-          .backgroundColor(this.displayMode === mode ? Palette.ACCENT : Palette.PANEL_ITEM)
-          .fontColor(this.displayMode === mode ? '#ffffff' : Palette.PANEL_TEXT)
+          .backgroundColor(this.displayMode === mode ? Palette.PRIMARY_CONTAINER : Palette.PANEL)
+          .fontColor(this.displayMode === mode ? Palette.ON_PRIMARY_CONTAINER : Palette.PANEL_TEXT)
           .onClick(() => {
             this.displayMode = mode;
           })
       }, (mode: string) => mode)
     }
     .width('100%')
+    .padding(4)
+    .backgroundColor(Palette.PANEL)
+    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+    .borderRadius(24)
   }
 
   @Builder
@@ -1002,13 +1233,14 @@ struct ScopePage {
     Flex({ wrap: FlexWrap.Wrap }) {
       ForEach(WaveOptions.ALL, (item: WaveOption) => {
         Button(item.label)
-          .fontSize(11)
-          .height(28)
+          .borderRadius(20)
+          .fontSize(14)
+          .height(36)
           .padding({ left: 10, right: 10 })
           .margin(3)
           .backgroundColor((isCh1 ? this.ch1Type : this.ch2Type) === item.key ?
-            (isCh1 ? Palette.CH1 : Palette.CH2) : Palette.PANEL_ITEM)
-          .fontColor('#ffffff')
+            (isCh1 ? Palette.CHANNEL_1 : Palette.CHANNEL_2) : Palette.PANEL_ITEM)
+          .fontColor((isCh1 ? this.ch1Type : this.ch2Type) === item.key ? Palette.ON_ACCENT : Palette.PANEL_TEXT)
           .onClick(() => {
             if (isCh1) {
               this.ch1Type = item.key;
@@ -1025,9 +1257,11 @@ struct ScopePage {
   ch1Panel() {
     Column() {
       Row() {
-        this.sectionTitle('通道 1', Palette.CH1)
+        Row() {
+          this.sectionTitle('通道 1', Palette.CHANNEL_1)
+        }.layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.ch1Enabled })
-          .selectedColor(Palette.CH1)
+          .selectedColor(Palette.CHANNEL_1)
           .onChange((isOn: boolean) => {
             this.ch1Enabled = isOn;
           })
@@ -1042,7 +1276,7 @@ struct ScopePage {
         minValue: 1,
         maxValue: Limits.FREQ_MAX,
         stepValue: 1,
-        accent: Palette.CH1,
+        accent: Palette.CHANNEL_1,
         sliderValue: this.ch1Freq,
         onValueChange: (value: number) => {
           this.ch1Freq = value;
@@ -1055,7 +1289,7 @@ struct ScopePage {
         minValue: Limits.AMP_MIN,
         maxValue: Limits.AMP_MAX,
         stepValue: 0.1,
-        accent: Palette.CH1,
+        accent: Palette.CHANNEL_1,
         sliderValue: this.ch1Amp,
         onValueChange: (value: number) => {
           this.ch1Amp = value;
@@ -1068,7 +1302,7 @@ struct ScopePage {
         minValue: Limits.VOLTS_DIV_MIN,
         maxValue: Limits.VOLTS_DIV_MAX,
         stepValue: 0.1,
-        accent: Palette.CH1,
+        accent: Palette.CHANNEL_1,
         sliderValue: this.ch1VoltsDiv,
         onValueChange: (value: number) => {
           this.ch1VoltsDiv = value;
@@ -1081,7 +1315,7 @@ struct ScopePage {
         minValue: Limits.POS_MIN,
         maxValue: Limits.POS_MAX,
         stepValue: 0.1,
-        accent: Palette.CH1,
+        accent: Palette.CHANNEL_1,
         sliderValue: this.ch1Pos,
         onValueChange: (value: number) => {
           this.ch1Pos = value;
@@ -1089,19 +1323,22 @@ struct ScopePage {
       })
     }
     .width('100%')
-    .padding(10)
+    .padding(16)
     .backgroundColor(Palette.PANEL)
-    .borderRadius(10)
-    .margin({ top: 8 })
+    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+    .borderRadius(24)
+    .margin({ top: 12 })
   }
 
   @Builder
   ch2Panel() {
     Column() {
       Row() {
-        this.sectionTitle('通道 2', Palette.CH2)
+        Row() {
+          this.sectionTitle('通道 2', Palette.CHANNEL_2)
+        }.layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.ch2Enabled })
-          .selectedColor(Palette.CH2)
+          .selectedColor(Palette.CHANNEL_2)
           .onChange((isOn: boolean) => {
             this.ch2Enabled = isOn;
           })
@@ -1116,7 +1353,7 @@ struct ScopePage {
         minValue: 1,
         maxValue: Limits.FREQ_MAX,
         stepValue: 1,
-        accent: Palette.CH2,
+        accent: Palette.CHANNEL_2,
         sliderValue: this.ch2Freq,
         onValueChange: (value: number) => {
           this.ch2Freq = value;
@@ -1129,7 +1366,7 @@ struct ScopePage {
         minValue: Limits.AMP_MIN,
         maxValue: Limits.AMP_MAX,
         stepValue: 0.1,
-        accent: Palette.CH2,
+        accent: Palette.CHANNEL_2,
         sliderValue: this.ch2Amp,
         onValueChange: (value: number) => {
           this.ch2Amp = value;
@@ -1142,7 +1379,7 @@ struct ScopePage {
         minValue: Limits.VOLTS_DIV_MIN,
         maxValue: Limits.VOLTS_DIV_MAX,
         stepValue: 0.1,
-        accent: Palette.CH2,
+        accent: Palette.CHANNEL_2,
         sliderValue: this.ch2VoltsDiv,
         onValueChange: (value: number) => {
           this.ch2VoltsDiv = value;
@@ -1155,7 +1392,7 @@ struct ScopePage {
         minValue: Limits.POS_MIN,
         maxValue: Limits.POS_MAX,
         stepValue: 0.1,
-        accent: Palette.CH2,
+        accent: Palette.CHANNEL_2,
         sliderValue: this.ch2Pos,
         onValueChange: (value: number) => {
           this.ch2Pos = value;
@@ -1168,7 +1405,7 @@ struct ScopePage {
         minValue: Limits.PHASE_MIN,
         maxValue: Limits.PHASE_MAX,
         stepValue: 5,
-        accent: Palette.CH2,
+        accent: Palette.CHANNEL_2,
         sliderValue: this.phaseDeg,
         onValueChange: (value: number) => {
           this.phaseDeg = value;
@@ -1176,23 +1413,24 @@ struct ScopePage {
       })
     }
     .width('100%')
-    .padding(10)
+    .padding(16)
     .backgroundColor(Palette.PANEL)
-    .borderRadius(10)
-    .margin({ top: 8 })
+    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+    .borderRadius(24)
+    .margin({ top: 12 })
   }
 
   @Builder
   timebasePanel() {
     Column() {
-      this.sectionTitle('水平时基', Palette.TEXT)
+      this.sectionTitle('水平时基', Palette.ACCENT)
       ScopeSlider({
         label: '时基',
         valueText: WaveMath.formatTimeDiv(this.timeDivMs / 1000),
         minValue: 1,
         maxValue: 500,
         stepValue: 1,
-        accent: Palette.TEXT,
+        accent: Palette.ACCENT,
         sliderValue: this.timeDivMs,
         onValueChange: (value: number) => {
           this.timeDivMs = value;
@@ -1200,19 +1438,22 @@ struct ScopePage {
       })
     }
     .width('100%')
-    .padding(10)
+    .padding(16)
     .backgroundColor(Palette.PANEL)
-    .borderRadius(10)
-    .margin({ top: 8 })
+    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+    .borderRadius(24)
+    .margin({ top: 12 })
   }
 
   @Builder
   triggerPanel() {
     Column() {
       Row() {
-        this.sectionTitle('触发', Palette.TRIGGER)
+        Row() {
+          this.sectionTitle('触发', Palette.TRIGGER_CONTROL)
+        }.layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.trigEnabled })
-          .selectedColor(Palette.TRIGGER)
+          .selectedColor(Palette.TRIGGER_CONTROL)
           .onChange((isOn: boolean) => {
             this.trigEnabled = isOn;
           })
@@ -1225,7 +1466,7 @@ struct ScopePage {
         minValue: Limits.TRIGGER_MIN,
         maxValue: Limits.TRIGGER_MAX,
         stepValue: 0.1,
-        accent: Palette.TRIGGER,
+        accent: Palette.TRIGGER_CONTROL,
         sliderValue: this.trigLevel,
         onValueChange: (value: number) => {
           this.trigLevel = value;
@@ -1234,18 +1475,20 @@ struct ScopePage {
 
       Row() {
         Button(this.trigRising ? '上升沿 ↑' : '下降沿 ↓')
-          .fontSize(12)
-          .height(30)
+          .borderRadius(20)
+          .fontSize(14)
+          .height(40)
           .layoutWeight(1)
           .margin({ right: 6 })
           .backgroundColor(Palette.PANEL_ITEM)
-          .fontColor(Palette.TRIGGER)
+          .fontColor(Palette.TRIGGER_CONTROL)
           .onClick(() => {
             this.trigRising = !this.trigRising;
           })
         Button('触发电平归零')
-          .fontSize(12)
-          .height(30)
+          .borderRadius(20)
+          .fontSize(14)
+          .height(40)
           .layoutWeight(1)
           .backgroundColor(Palette.PANEL_ITEM)
           .fontColor(Palette.PANEL_TEXT)
@@ -1257,16 +1500,17 @@ struct ScopePage {
       .margin({ top: 4 })
 
       Text(this.trigEnabled ? '触发已锁定：波形稳定，调电平可左右移动波形' : '自由扫描：波形随时间滚动')
-        .fontSize(10)
-        .fontColor(Palette.TEXT_DIM)
+        .fontSize(12)
+        .fontColor(Palette.PANEL_TEXT)
         .width('100%')
         .margin({ top: 6 })
     }
     .width('100%')
-    .padding(10)
+    .padding(16)
     .backgroundColor(Palette.PANEL)
-    .borderRadius(10)
-    .margin({ top: 8 })
+    .border({ width: 1, color: Palette.OUTLINE_VARIANT })
+    .borderRadius(24)
+    .margin({ top: 12 })
   }
 
   @Builder
@@ -1274,82 +1518,131 @@ struct ScopePage {
     Row() {
       Column() {
         Text('示波器模拟器')
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#e8f4ec')
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .fontColor(Palette.ON_SURFACE)
         Text(this.userName + ' · ' + ModeNames.label(this.displayMode))
-          .fontSize(10)
-          .fontColor(Palette.TEXT_DIM)
-          .margin({ top: 1 })
+          .fontSize(12)
+          .fontColor(Palette.PANEL_TEXT)
+          .margin({ top: 4 })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .alignItems(HorizontalAlign.Start)
-
-      Blank()
+      .layoutWeight(1)
+      .margin({ right: 8 })
 
       Button(this.running ? '暂停' : '继续')
-        .fontSize(12)
-        .height(30)
-        .backgroundColor(this.running ? '#1f3a2c' : Palette.ACCENT)
-        .fontColor('#ffffff')
+        .borderRadius(20)
+        .fontSize(14)
+        .height(40)
+        .backgroundColor(this.running ? Palette.PRIMARY_CONTAINER : Palette.ACCENT)
+        .fontColor(this.running ? Palette.ON_PRIMARY_CONTAINER : Palette.ON_ACCENT)
         .onClick(() => {
           this.toggleRun();
         })
       Button('复位')
-        .fontSize(12)
-        .height(30)
+        .borderRadius(20)
+        .fontSize(14)
+        .height(40)
         .margin({ left: 6 })
         .backgroundColor(Palette.PANEL_ITEM)
-        .fontColor('#ffffff')
+        .fontColor(Palette.ON_SURFACE)
         .onClick(() => {
           this.resetRun();
         })
       Button('退出')
-        .fontSize(12)
-        .height(30)
+        .borderRadius(20)
+        .fontSize(14)
+        .height(40)
         .margin({ left: 6 })
-        .backgroundColor('#33202a')
-        .fontColor('#ff8a8a')
+        .backgroundColor(Palette.ERROR_CONTAINER)
+        .fontColor(Palette.ERROR)
         .onClick(() => {
           this.exitToLogin();
         })
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .padding({ left: 16, right: 16, top: 16, bottom: 12 })
   }
 
   build() {
-    Column() {
-      this.topBar()
-      this.draftBar()
+    WithTheme({ colorMode: ThemeColorMode.LIGHT }) {
+      Column() {
+        this.topBar()
+        this.draftBar()
 
-      Canvas(this.canvasCtx)
-        .width('100%')
-        .aspectRatio(Layout.ASPECT)
-        .backgroundColor('#020604')
-        .onReady(() => {
-          this.frame();
-        })
-
-      Scroll() {
         Column() {
-          this.recordsPanel()
-          this.localRecordsPanel()
-          this.modeRow()
-          this.ch1Panel()
-          this.ch2Panel()
-          this.timebasePanel()
-          this.triggerPanel()
-          Blank().height(16)
+          Canvas(this.canvasCtx)
+            .width('100%')
+            .aspectRatio(Layout.ASPECT)
+            .constraintSize({ maxHeight: 280 })
+            .backgroundColor(Palette.BACKGROUND_OUT)
+            .borderRadius(24)
+            .clip(true)
+            .onReady(() => {
+              this.frame();
+            })
         }
         .width('100%')
-        .padding({ left: 10, right: 10, top: 8 })
+        .padding({ left: 16, right: 16, bottom: 12 })
+
+        Tabs({ barPosition: BarPosition.Start }) {
+          TabContent() {
+            Scroll() {
+              Column() {
+                this.modeRow()
+                GridRow({ columns: 12, gutter: 12 }) {
+                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                    this.ch1Panel()
+                  }
+                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                    this.ch2Panel()
+                  }
+                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                    this.timebasePanel()
+                  }
+                  GridCol({ span: { sm: 12, md: 6, lg: 6 } }) {
+                    this.triggerPanel()
+                  }
+                }
+                Blank().height(24)
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12 })
+            }
+            .scrollBar(BarState.Auto)
+            .align(Alignment.Top)
+          }.tabBar(new SubTabBarStyle('波形控制')
+            .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
+            .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
+          TabContent() {
+            Scroll() {
+              Column() {
+                this.localRecordsPanel()
+                this.recordsPanel()
+                Blank().height(24)
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12 })
+            }
+            .scrollBar(BarState.Auto)
+            .align(Alignment.Top)
+          }.tabBar(new SubTabBarStyle('实验记录')
+            .labelStyle({ selectedColor: Palette.ACCENT, unselectedColor: Palette.PANEL_TEXT })
+            .indicator({ color: Palette.ACCENT, height: 3, borderRadius: 3 }))
+        }
+        .barMode(BarMode.Fixed)
+        .barHeight(48)
+        .divider({ strokeWidth: 1, color: Palette.OUTLINE_VARIANT })
+        .backgroundColor(Palette.SURFACE)
+        .layoutWeight(1)
       }
-      .scrollBar(BarState.Auto)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Palette.SURFACE)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#080f14')
   }
 }

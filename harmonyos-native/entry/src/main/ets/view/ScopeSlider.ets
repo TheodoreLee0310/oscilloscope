@@ -20,11 +20,11 @@ export struct ScopeSlider {
     Column() {
       Row() {
         Text(this.label)
-          .fontSize(12)
+          .fontSize(14)
           .fontColor(Palette.PANEL_TEXT)
         Blank()
         Text(this.valueText)
-          .fontSize(12)
+          .fontSize(14)
           .fontColor(this.accent)
           .fontWeight(FontWeight.Medium)
       }
@@ -39,12 +39,14 @@ export struct ScopeSlider {
       })
         .width('100%')
         .selectedColor(this.accent)
-        .trackThickness(3)
+        .blockColor(this.accent)
+        .trackColor(Palette.PANEL_ITEM)
+        .trackThickness(6)
         .onChange((value: number, mode: SliderChangeMode) => {
           this.onValueChange(value);
         })
     }
     .width('100%')
-    .padding({ top: 2, bottom: 4 })
+    .padding({ top: 10, bottom: 4 })
   }
 }
